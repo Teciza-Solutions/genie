@@ -16,6 +16,7 @@ def create_ticket(
 	user_fullname=None,
 	priority="Low",
 	file_attachment=None,
+	department=None,
 ):
 	settings = frappe.get_cached_doc("Genie Settings")
 	headers = {
@@ -55,6 +56,7 @@ def create_ticket(
 				"raised_by_user": user, #link field to restrict
 				"user_fullname":user_fullname,
 				"customer": settings.hd_customer,
+				"department": department,
 				**generate_ticket_details(settings),
 			},
 			"attachments": attachments,
@@ -126,7 +128,7 @@ def get_portal_url(user=frappe.session.user):
 			frappe.throw("Login to support portal failed: No session ID received.")
 
 		return {
-			"url": f"{support_url}/helpdesk?sid={sid}"
+			"url": f"{support_url}/helpdesk/my-tickets?sid={sid}"
 		}
 
 	except Exception as e:
