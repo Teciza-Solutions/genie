@@ -106,7 +106,7 @@ def upload_file(content):
 @frappe.whitelist()
 def get_portal_url(user=frappe.session.user):
 	support_url = frappe.db.get_single_value("Genie Settings", "support_url")
-	password = f"{get_fullname(user)}@123"
+	password = f"{user}@123"
 
 	try:
 		response = make_request(
@@ -148,7 +148,6 @@ def create_portal_user(settings, headers, user, user_fullname):
 		)
 	except Exception as e:
 		frappe.log_error(title="Portal User Check Failed", message=frappe.get_traceback())
-
 	if not user_exists.get("data"):
 		try:
 			# Create the user
@@ -163,6 +162,7 @@ def create_portal_user(settings, headers, user, user_fullname):
 					"roles": [
 						{"role": "Agent"}  # or "HD Customer" if intended
 					],
+					"modules": [],
 				},
 				req_type="POST",
 			)
