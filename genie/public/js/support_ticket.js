@@ -237,7 +237,7 @@ genie.SupportTicket = class SupportTicket {
 				if (!r.exc && r.message) {
 					frappe.show_alert({
 						indicator: "green",
-						message: __("Ticket raised successfully"),
+						message: __(`Ticket raised successfully Ticket ID: ${r.message}`),
 					});
 					this.dialog.hide();
 					frappe.msgprint(
