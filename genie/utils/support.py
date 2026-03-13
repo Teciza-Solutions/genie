@@ -27,7 +27,10 @@ def create_ticket(
 		"Authorization": f"token {settings.get_password('support_api_token')}",
 	}
 
-	ensure_portal_user(settings, headers, user, user_fullname)
+	roles = frappe.get_roles(user)
+	is_department_head = "HOD" in roles or "Department Head" in roles
+
+	ensure_portal_user(settings, headers, user, user_fullname, department, is_department_head)
 
 	attachments = []
 
@@ -76,7 +79,7 @@ def create_ticket(
 	return response.get("message")
 
 
-def ensure_portal_user(settings, headers, user, user_fullname):
+def ensure_portal_user(settings, headers, user, user_fullname, department, is_department_head):
 	"""Ensure portal user exists in Opero"""
 
 	if not user:
@@ -106,7 +109,9 @@ def ensure_portal_user(settings, headers, user, user_fullname):
 			"email": user,
 			"first_name": user_fullname or user.split("@")[0],
 			"enabled": 1,
-			"hd_customer": settings.hd_customer,
+			"customer": settings.hd_customer,
+			"department": department,
+			"is_department_head": is_department_head,
 			"roles": [
 				{"role": "Opero Ticket Raiser"}
 			],
