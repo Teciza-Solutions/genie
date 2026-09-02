@@ -7,5 +7,6 @@ import frappe
 def set_bootinfo(bootinfo):
     genie_settings = frappe.get_cached_doc("Genie Settings")
     bootinfo["genie_support_enabled"] = genie_settings.enable_ticket_raising
+    bootinfo["genie_cr_enabled"] = getattr(genie_settings, "enable_change_request_raising", 1)
     bootinfo["genie_max_file_size"] = genie_settings.max_recording_size
     bootinfo["genie_file_type"] = 1 if genie_settings.save_recording == "Private" else 0

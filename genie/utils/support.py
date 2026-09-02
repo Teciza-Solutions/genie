@@ -175,3 +175,146 @@ def get_portal_url(user=frappe.session.user):
 		frappe.throw(
 			"Unable to log in to the support portal. Please try again later."
 		)
+
+
+@frappe.whitelist()
+def create_change_request(
+	title,
+	change_description,
+	business_justification,
+	cr_type="Custom",
+	impact="Low",
+	user=None,
+	user_fullname=None,
+	file_attachment=None,
+	attachments=None,
+	department=None,
+):
+	"""Create a Change Request in Genie (status: Pending)"""
+	if not user:
+		user = frappe.session.user
+	if not user_fullname:
+		user_fullname = frappe.utils.get_fullname(user)
+
+	if isinstance(attachments, str):
+		try:
+			attachments = json.loads(attachments)
+		except Exception:
+			attachments = []
+
+	cr_doc = frappe.get_doc({
+		"doctype": "Change Request",
+		"title": title,
+		"type": cr_type,
+		"impact": impact,
+		"change_description": change_description,
+		"business_justification": business_justification,
+		"requested_by": user,
+		"requested_by_fullname": user_fullname,
+		"department": department,
+		"file_attachment": file_attachment,
+		"status": "Pending",
+		"date": frappe.utils.today(),
+	})
+
+	if attachments and isinstance(attachments, list):
+		for item in attachments:
+			file_url = None
+			if isinstance(item, dict):
+				file_url = item.get("file")
+			elif isinstance(item, str):
+				file_url = item
+
+			if file_url:
+				cr_doc.append("attachments", {
+					"file": file_url,
+					"file_name": file_url.split("/")[-1]
+				})
+
+	cr_doc.insert(ignore_permissions=True)
+	return cr_doc.name
+
+
+def push_change_request_to_opero(doc):
+	"""Push approved Change Request from Genie to Opero"""
+	settings = frappe.get_cached_doc("Genie Settings")
+	if not settings.support_url or not settings.get_password("support_api_token"):
+		frappe.log_error(title="Opero Sync Error", message="Genie Settings support_url or API token is missing.")
+		return None
+
+	headers = {
+		"Authorization": f"token {settings.get_password('support_api_token')}",
+	}
+
+	user = doc.requested_by or frappe.session.user
+	user_fullname = doc.requested_by_fullname or doc.requested_by
+	department = doc.department
+
+	roles = frappe.get_roles(user)
+	is_department_head = "HOD" in roles or "Department Head" in roles
+
+	ensure_portal_user(settings, headers, user, user_fullname, department, is_department_head)
+
+	attachments = []
+
+	if doc.get("attachments"):
+		for row in doc.attachments:
+			if row.file:
+				file_url = row.file
+				if not file_url.startswith("http"):
+					file_url = f"{get_url()}{file_url}"
+
+				try:
+					file_data = make_request(
+						url=f"{settings.support_url.rstrip('/')}/api/method/upload_file",
+						headers=headers,
+						payload={"file_url": file_url},
+					).get("message")
+					if file_data:
+						attachments.append(file_data)
+				except Exception as e:
+					frappe.log_error(title="File Upload Error for Change Request", message=str(e))
+
+	if doc.file_attachment:
+		file_url = doc.file_attachment
+		if not file_url.startswith("http"):
+			file_url = f"{get_url()}{file_url}"
+
+		try:
+			file_data = make_request(
+				url=f"{settings.support_url.rstrip('/')}/api/method/upload_file",
+				headers=headers,
+				payload={"file_url": file_url},
+			).get("message")
+			if file_data:
+				attachments.append(file_data)
+		except Exception as e:
+			frappe.log_error(title="File Upload Error for Change Request", message=str(e))
+
+	try:
+		response = make_request(
+			url=f"{settings.support_url.rstrip('/')}/api/method/opero.api.change_request.create_opero_change_request",
+			headers=headers,
+			payload={
+				"doc": {
+					"project": settings.hd_customer,
+					"date": str(doc.date or frappe.utils.today()),
+					"type": doc.type or "Custom",
+					"impact": doc.impact or "Low",
+					"change_description": doc.change_description,
+					"business_justification": doc.business_justification,
+					"prepared_by": user,
+					"status": "Open",
+				},
+				"attachments": attachments,
+			},
+		)
+
+		opero_id = response.get("message") if isinstance(response, dict) else None
+		if opero_id and isinstance(opero_id, str):
+			doc.db_set("opero_cr_id", opero_id, update_modified=False)
+			frappe.msgprint(f"Change Request pushed to Opero: {opero_id}")
+		return opero_id
+	except Exception as e:
+		frappe.log_error(title="Opero Sync Error for Change Request", message=str(e))
+		return None

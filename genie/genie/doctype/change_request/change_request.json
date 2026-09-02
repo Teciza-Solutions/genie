@@ -1,0 +1,183 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "CR-.####",
+ "creation": "2026-09-02 02:45:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "status",
+  "type",
+  "impact",
+  "column_break_1",
+  "requested_by",
+  "requested_by_fullname",
+  "department",
+  "date",
+  "section_break_crdetail",
+  "change_description",
+  "business_justification",
+  "section_break_attachment",
+  "attachments",
+  "file_attachment",
+  "section_break_opero",
+  "opero_cr_id",
+  "approved_by",
+  "approved_date"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending\nApproved\nCompleted"
+  },
+  {
+   "fieldname": "type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Type",
+   "options": "Custom\nINT\nConfig"
+  },
+  {
+   "fieldname": "impact",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Impact",
+   "options": "Low\nMedium\nHigh"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "requested_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Requested By",
+   "options": "User"
+  },
+  {
+   "fieldname": "requested_by_fullname",
+   "fieldtype": "Data",
+   "label": "Requested By Full Name"
+  },
+  {
+   "fieldname": "department",
+   "fieldtype": "Link",
+   "label": "Department",
+   "options": "Department"
+  },
+  {
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "Date"
+  },
+  {
+   "fieldname": "section_break_crdetail",
+   "fieldtype": "Section Break",
+   "label": "Change Details"
+  },
+  {
+   "fieldname": "change_description",
+   "fieldtype": "Text Editor",
+   "label": "Change Description",
+   "reqd": 1
+  },
+  {
+   "fieldname": "business_justification",
+   "fieldtype": "Text Editor",
+   "label": "Business Justification",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_attachment",
+   "fieldtype": "Section Break",
+   "label": "Attachments"
+  },
+  {
+   "fieldname": "attachments",
+   "fieldtype": "Table",
+   "label": "Attachments",
+   "options": "Change Request Attachment"
+  },
+  {
+   "fieldname": "file_attachment",
+   "fieldtype": "Attach",
+   "hidden": 1,
+   "label": "File Attachment"
+  },
+  {
+   "fieldname": "section_break_opero",
+   "fieldtype": "Section Break",
+   "label": "Opero Sync"
+  },
+  {
+   "fieldname": "opero_cr_id",
+   "fieldtype": "Data",
+   "label": "Opero CR ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_by",
+   "fieldtype": "Link",
+   "label": "Approved By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approved_date",
+   "fieldtype": "Date",
+   "label": "Approved Date",
+   "read_only": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-02 02:45:00.000000",
+ "modified_by": "Administrator",
+ "module": "Genie",
+ "name": "Change Request",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "All",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
