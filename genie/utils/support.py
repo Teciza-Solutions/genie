@@ -10,6 +10,9 @@ from frappe.utils.safe_exec import get_safe_globals, safe_eval
 from genie.utils.requests import make_request
 
 
+from frappe import _
+
+
 @frappe.whitelist()
 def create_ticket(
 	title,
@@ -18,11 +21,24 @@ def create_ticket(
 	user=None,
 	user_fullname=None,
 	priority="Low",
+	ticket_type="Bug / Issue",
 	file_attachment=None,
+	attachments=None,
+	system_info=None,
+	console_logs=None,
 	department=None,
 ):
-	"""Create ticket in Opero Support Portal"""
+	"""Create ticket in Opero Support Portal with rich diagnostics and media attachments"""
 	settings = frappe.get_cached_doc("Genie Settings")
+	if not settings.enable_ticket_raising:
+		frappe.throw(_("Ticket raising is not enabled in Genie Settings."))
+
+	if not settings.support_url or not settings.get_password("support_api_token"):
+		frappe.throw(_("Support URL or API token is missing in Genie Settings."))
+
+	user = user or frappe.session.user
+	user_fullname = user_fullname or frappe.utils.get_fullname(user)
+
 	headers = {
 		"Authorization": f"token {settings.get_password('support_api_token')}",
 	}
@@ -32,36 +48,59 @@ def create_ticket(
 
 	ensure_portal_user(settings, headers, user, user_fullname, department, is_department_head)
 
-	attachments = []
-
+	# Aggregate attachments
+	all_file_urls = []
 	if screen_recording:
-		screen_recording = f"{get_url()}{screen_recording}"
-
-		file_data = make_request(
-			url=f"{settings.support_url.rstrip('/')}/api/method/upload_file",
-			headers=headers,
-			payload={"file_url": screen_recording},
-		).get("message")
-
-		attachments.append(file_data)
-
+		all_file_urls.append(screen_recording)
 	if file_attachment:
-		file_attachment = f"{get_url()}{file_attachment}"
+		all_file_urls.append(file_attachment)
 
-		file_data = make_request(
-			url=f"{settings.support_url.rstrip('/')}/api/method/upload_file",
-			headers=headers,
-			payload={"file_url": file_attachment},
-		).get("message")
+	if attachments:
+		if isinstance(attachments, str):
+			try:
+				attachments = json.loads(attachments)
+			except Exception:
+				attachments = [attachments]
+		if isinstance(attachments, list):
+			for item in attachments:
+				if isinstance(item, dict):
+					url = item.get("file_url") or item.get("file")
+				else:
+					url = str(item)
+				if url and url not in all_file_urls:
+					all_file_urls.append(url)
 
-		attachments.append(file_data)
+	remote_attachments = []
+	for file_url in all_file_urls:
+		if not file_url:
+			continue
+		full_file_url = file_url if file_url.startswith("http") else f"{get_url()}{file_url}"
+		try:
+			file_data = make_request(
+				url=f"{settings.support_url.rstrip('/')}/api/method/upload_file",
+				headers=headers,
+				payload={"file_url": full_file_url},
+			).get("message")
+			if file_data:
+				remote_attachments.append(file_data)
+		except Exception as e:
+			frappe.log_error(title="Attachment Upload Error to Support Portal", message=str(e))
+
+	# Format rich diagnostics section
+	enriched_description = format_ticket_description(
+		description=description,
+		system_info=system_info,
+		console_logs=console_logs,
+		user=user,
+		user_fullname=user_fullname,
+	)
 
 	response = make_request(
 		url=f"{settings.support_url.rstrip('/')}/api/method/opero.api.ticket.create_opero_ticket",
 		headers=headers,
 		payload={
 			"doc": {
-				"description": description,
+				"description": enriched_description,
 				"subject": title,
 				"priority": priority,
 				"raised_by": user,
@@ -69,14 +108,116 @@ def create_ticket(
 				"user_fullname": user_fullname,
 				"customer": settings.hd_customer,
 				"department": department,
-				"ticket_type": "Support",
+				"ticket_type": ticket_type or "Support",
 				**generate_ticket_details(settings),
 			},
-			"attachments": attachments,
+			"attachments": remote_attachments,
 		},
 	)
 
-	return response.get("message")
+	ticket_id = response.get("message") if isinstance(response, dict) else response
+	if isinstance(ticket_id, dict) and ticket_id.get("error"):
+		frappe.throw(str(ticket_id.get("error")))
+
+	return {
+		"ticket_id": ticket_id,
+		"portal_url": settings.support_url.rstrip("/"),
+	}
+
+
+def format_ticket_description(description, system_info, console_logs, user, user_fullname):
+	"""Append rich environment diagnostics and error logs to ticket description"""
+	content = [description or ""]
+
+	if system_info:
+		if isinstance(system_info, str):
+			try:
+				system_info = json.loads(system_info)
+			except Exception:
+				system_info = {}
+
+		if isinstance(system_info, dict) and system_info:
+			rows_html = []
+			for k, v in system_info.items():
+				label = k.replace("_", " ").title()
+				rows_html.append(f"""
+					<tr>
+						<td style="padding: 6px 12px; border: 1px solid #e2e8f0; font-weight: 600; background: #f8fafc; width: 35%;">{label}</td>
+						<td style="padding: 6px 12px; border: 1px solid #e2e8f0; word-break: break-all;">{frappe.utils.escape_html(str(v))}</td>
+					</tr>
+				""")
+
+			content.append(f"""
+				<br><br>
+				<div style="margin-top: 24px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+					<div style="background: #f1f5f9; padding: 10px 16px; font-weight: 600; font-size: 13px; color: #334155; border-bottom: 1px solid #e2e8f0;">
+						System & Environment Diagnostics
+					</div>
+					<table style="width: 100%; border-collapse: collapse; font-size: 12px; color: #475569;">
+						{''.join(rows_html)}
+					</table>
+				</div>
+			""")
+
+	if console_logs:
+		logs_data = None
+		if isinstance(console_logs, str):
+			try:
+				logs_data = json.loads(console_logs)
+			except Exception:
+				logs_data = None
+
+		if isinstance(logs_data, list) and logs_data:
+			error_cards = []
+			for idx, err in enumerate(logs_data, 1):
+				err_type = frappe.utils.escape_html(str(err.get("type", "Error")))
+				err_time = frappe.utils.escape_html(str(err.get("time", "")))
+				err_msg = frappe.utils.escape_html(str(err.get("message") or err.get("response") or err.get("error") or ""))
+				err_stack = frappe.utils.escape_html(str(err.get("stack") or ""))
+
+				stack_html = (
+					f'<pre style="margin: 6px 0 0 0; padding: 6px; background: #fee2e2; border-radius: 4px; font-size: 10px; font-family: monospace; overflow-x: auto; white-space: pre-wrap;">{err_stack}</pre>'
+					if err_stack
+					else ""
+				)
+
+				error_cards.append(f"""
+					<div style="margin-bottom: 8px; padding: 8px 10px; background: #fff5f5; border: 1px solid #fecaca; border-radius: 6px;">
+						<div style="display: flex; justify-content: space-between; font-weight: 600; color: #991b1b; font-size: 11px;">
+							<span>#{idx} [{err_type}]</span>
+							<span style="color: #64748b; font-weight: 400;">{err_time}</span>
+						</div>
+						<div style="font-family: monospace; font-size: 11px; color: #b91c1c; margin-top: 4px; word-break: break-all;">
+							{err_msg}
+						</div>
+						{stack_html}
+					</div>
+				""")
+
+			content.append(f"""
+				<br>
+				<div style="margin-top: 16px; border: 1px solid #fecaca; border-radius: 8px; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+					<div style="background: #fef2f2; padding: 10px 16px; font-weight: 600; font-size: 13px; color: #991b1b; border-bottom: 1px solid #fecaca;">
+						Client Error / Console Log Capture ({len(logs_data)} events)
+					</div>
+					<div style="padding: 12px; background: #fff;">
+						{''.join(error_cards)}
+					</div>
+				</div>
+			""")
+		else:
+			escaped_logs = frappe.utils.escape_html(str(console_logs))
+			content.append(f"""
+				<br>
+				<div style="margin-top: 16px; border: 1px solid #fecaca; border-radius: 8px; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+					<div style="background: #fef2f2; padding: 10px 16px; font-weight: 600; font-size: 13px; color: #991b1b; border-bottom: 1px solid #fecaca;">
+						Client Error / Console Log Capture
+					</div>
+					<pre style="margin: 0; padding: 12px; background: #fff5f5; color: #b91c1c; font-size: 11px; font-family: monospace; white-space: pre-wrap; word-break: break-all;">{escaped_logs}</pre>
+				</div>
+			""")
+
+	return "".join(content)
 
 
 def ensure_portal_user(settings, headers, user, user_fullname, department, is_department_head):
