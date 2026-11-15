@@ -85,8 +85,9 @@ genie.ChangeRequest = class ChangeRequest {
 
     async setup_dialog() {
         const default_company = frappe.defaults.get_user_default("Company") || frappe.defaults.get_default("company") || "";
+        const has_erp_head = frappe.user.has_role("ERP Head") || frappe.session.user === "Administrator";
 
-        this.steps = [
+        const all_steps = [
             {
                 key: "type",
                 label: "Type",
@@ -139,6 +140,7 @@ genie.ChangeRequest = class ChangeRequest {
                 label: "Assessment",
                 title: __("Enterprise Solutions assessment"),
                 help: __("Approvers see this when they decide."),
+                for_role: "ERP Head",
                 fieldnames: [
                     "sec_step6", "effort_days", "developer", "col_break_6",
                     "target_delivery_date", "planned_overtime_hours", "solution_approach"
@@ -153,10 +155,9 @@ genie.ChangeRequest = class ChangeRequest {
             }
         ];
 
-        this.dialog = new frappe.ui.Dialog({
-            title: __("New Change Request"),
-            size: "large",
-            fields: [
+        this.steps = all_steps.filter(s => !s.for_role || (s.for_role === "ERP Head" && has_erp_head));
+
+        const dialog_fields = [
                 // STEP 1: Type
                 {
                     fieldname: "sec_step1",
@@ -167,7 +168,7 @@ genie.ChangeRequest = class ChangeRequest {
                     fieldname: "type",
                     label: __("Type"),
                     fieldtype: "Select",
-                    options: "\nNew development\nEnhancement\nMinor change\nCustom\nINT\nConfig",
+                    options: "\nNew development\nEnhancement\nMinor change",
                     description: __("Pick the one that fits best. Enterprise Solutions can change it later."),
                     reqd: 1,
                 },
@@ -373,7 +374,6 @@ genie.ChangeRequest = class ChangeRequest {
                     label: __("Mandatory Reason"),
                     fieldtype: "Small Text",
                     description: __("Audit finding, ISO clause, contract, management order"),
-                    depends_on: "eval:doc.is_mandatory==1",
                 },
                 {
                     fieldname: "col_break_5",
@@ -404,6 +404,10 @@ genie.ChangeRequest = class ChangeRequest {
                     read_only: 1,
                 },
 
+        ];
+
+        if (has_erp_head) {
+            dialog_fields.push(
                 // STEP 6: Assessment (ES Assessment)
                 {
                     fieldname: "sec_step6",
@@ -443,19 +447,27 @@ genie.ChangeRequest = class ChangeRequest {
                     label: __("Solution Approach / Note for Approvers"),
                     fieldtype: "Small Text",
                     description: __("Scope, approach, dependencies, risks"),
-                },
-
-                // STEP 7: Review & submit
-                {
-                    fieldname: "sec_step7",
-                    fieldtype: "Section Break",
-                    label: __("Step 7: Check and Submit"),
-                },
-                {
-                    fieldname: "review_html",
-                    fieldtype: "HTML",
                 }
-            ]
+            );
+        }
+
+        dialog_fields.push(
+            // Final Step: Review & submit
+            {
+                fieldname: "sec_step7",
+                fieldtype: "Section Break",
+                label: has_erp_head ? __("Step 7: Check and Submit") : __("Step 6: Check and Submit"),
+            },
+            {
+                fieldname: "review_html",
+                fieldtype: "HTML",
+            }
+        );
+
+        this.dialog = new frappe.ui.Dialog({
+            title: __("New Change Request"),
+            size: "large",
+            fields: dialog_fields
         });
 
         // Hide default primary/secondary dialog action buttons
@@ -513,6 +525,24 @@ genie.ChangeRequest = class ChangeRequest {
         }
     }
 
+    get_field_val(fn) {
+        const f = this.dialog?.fields_dict?.[fn];
+        if (!f) return "";
+        if (f.df && f.df.fieldtype === "Check") {
+            if (f.$input && f.$input.length) return f.$input.is(":checked") ? 1 : 0;
+            return f.value ? 1 : 0;
+        }
+        if (f.$input && f.$input.length) {
+            const dom_val = f.$input.val();
+            if (dom_val !== undefined && dom_val !== null) return dom_val;
+        }
+        if (f.get_value) {
+            const val = f.get_value();
+            if (val !== undefined && val !== null) return val;
+        }
+        return f.value || "";
+    }
+
     mount_wizard_bar() {
         const $modal_body = this.dialog.$wrapper.find(".modal-body");
         const id = "cr_dlg_wizard_bar";
@@ -532,7 +562,7 @@ genie.ChangeRequest = class ChangeRequest {
                 </ol>
                 <div>
                     <span id="cr_dlg_step_tag" style="display:inline-block; font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#111827; background:#f3f4f6; border:1px solid #e5e7eb; padding:2px 8px; border-radius:4px; font-weight:800;">
-                        STEP 1 OF 7
+                        STEP 1 OF ${this.steps.length}
                     </span>
                     <h3 id="cr_dlg_wiz_title" style="margin:2px 0 2px 0; font-size:17px; font-weight:700; color:var(--text-color);">
                         ${this.steps[0].title}
@@ -572,12 +602,12 @@ genie.ChangeRequest = class ChangeRequest {
                     <div>
                         <button type="button" class="btn btn-default btn-sm" data-wiz="prev">← Previous</button>
                         <span id="cr_dlg_foot_step" style="margin-left:12px; font-size:12px; color:var(--text-muted);">
-                            Step 1 of 7
+                            Step 1 of ${this.steps.length}
                         </span>
                     </div>
                     <div>
-                        <button type="button" class="btn btn-primary btn-sm" data-wiz="next">Next →</button>
-                        <button type="button" class="btn btn-success btn-sm" data-wiz="finish">
+                        <button type="button" class="btn btn-primary btn-sm" data-wiz="next" style="color: #ffffff !important;">Next →</button>
+                        <button type="button" class="btn btn-success btn-sm" data-wiz="finish" style="color: #ffffff !important;">
                             ✔ Submit
                         </button>
                     </div>
@@ -593,7 +623,24 @@ genie.ChangeRequest = class ChangeRequest {
     }
 
     bind_change_events() {
-        // Priority score update on rating change
+        const toggle_mandatory_reason = (val) => {
+            const is_mand = val !== undefined ? !!val : !!this.get_field_val("is_mandatory");
+            const f_reason = this.dialog.fields_dict.mandatory_reason;
+            if (f_reason) {
+                f_reason.df.hidden = is_mand ? 0 : 1;
+                f_reason.df.reqd = is_mand ? 1 : 0;
+                f_reason.df.hidden_due_to_dependency = false;
+                const $w = f_reason.$wrapper || $(f_reason.wrapper);
+                if ($w && $w.length) {
+                    if (is_mand) {
+                        $w.removeClass("hide hide-control d-none").show().css({ display: "block" });
+                    } else {
+                        $w.addClass("hide hide-control").hide().css({ display: "none" });
+                    }
+                }
+            }
+        };
+
         const update_priority = () => {
             const parse_val = (v) => {
                 if (!v) return null;
@@ -604,16 +651,17 @@ genie.ChangeRequest = class ChangeRequest {
                 }
             };
 
-            const i = parse_val(this.dialog.get_value("impact_rating"));
-            const u = parse_val(this.dialog.get_value("urgency_rating"));
-            const r = parse_val(this.dialog.get_value("reach_rating"));
+            const i = parse_val(this.get_field_val("impact_rating"));
+            const u = parse_val(this.get_field_val("urgency_rating"));
+            const r = parse_val(this.get_field_val("reach_rating"));
 
             if (i === null && u === null && r === null) return;
 
             const iv = i || 3;
             const uv = u || 3;
             const rv = r || 3;
-            const mv = this.dialog.get_value("is_mandatory") ? 6 : 0;
+            const is_mand = !!this.get_field_val("is_mandatory");
+            const mv = is_mand ? 6 : 0;
 
             const raw = iv * 3 + uv * 3 + rv * 2 + mv;
             const score = Math.max(0, Math.min(100, Math.round((raw / 46.0) * 100)));
@@ -624,9 +672,24 @@ genie.ChangeRequest = class ChangeRequest {
             else if (score >= 35) priority = "Normal";
             else priority = "Low";
 
-            this.dialog.set_value("priority_score", score);
-            this.dialog.set_value("priority", priority);
+            const f_score = this.dialog.fields_dict.priority_score;
+            if (f_score) {
+                f_score.value = score;
+                f_score.set_input?.(score);
+            }
+            const f_prio = this.dialog.fields_dict.priority;
+            if (f_prio) {
+                f_prio.value = priority;
+                f_prio.set_input?.(priority);
+            }
         };
+
+        const f_reason = this.dialog.fields_dict.mandatory_reason;
+        if (f_reason && f_reason.$input) {
+            f_reason.$input.on("input", () => {
+                f_reason.value = f_reason.$input.val();
+            });
+        }
 
         const f_imp = this.dialog.fields_dict.impact_rating;
         const f_urg = this.dialog.fields_dict.urgency_rating;
@@ -636,13 +699,25 @@ genie.ChangeRequest = class ChangeRequest {
         if (f_imp && f_imp.$input) f_imp.$input.on("change", update_priority);
         if (f_urg && f_urg.$input) f_urg.$input.on("change", update_priority);
         if (f_rea && f_rea.$input) f_rea.$input.on("change", update_priority);
-        if (f_man && f_man.$input) f_man.$input.on("change", update_priority);
+
+        if (f_man) {
+            const on_man_change = () => {
+                const is_mand = f_man.$input ? f_man.$input.is(":checked") : !!this.get_field_val("is_mandatory");
+                f_man.value = is_mand ? 1 : 0;
+                toggle_mandatory_reason(is_mand);
+                update_priority();
+            };
+            f_man.df.onchange = on_man_change;
+            if (f_man.$input) {
+                f_man.$input.on("change", on_man_change);
+            }
+        }
 
         // Employee change listener
         const f_emp = this.dialog.fields_dict.employee;
         if (f_emp && f_emp.$input) {
             f_emp.$input.on("change", () => {
-                this.on_employee_change(this.dialog.get_value("employee"));
+                this.on_employee_change(this.get_field_val("employee"));
             });
         }
     }
@@ -650,31 +725,44 @@ genie.ChangeRequest = class ChangeRequest {
     render_step() {
         const current = this.steps[this.step];
 
-        // Hide all fields across all steps
-        this.steps.forEach((s) => {
-            s.fieldnames.forEach((fn) => {
-                const f = this.dialog.fields_dict[fn];
-                if (f) {
-                    f.df.hidden = 1;
-                    const $w = f.$wrapper || $(f.wrapper);
-                    if ($w && $w.length) $w.hide();
+        // Hide all fields across the entire dialog
+        Object.keys(this.dialog.fields_dict).forEach((fn) => {
+            const f = this.dialog.fields_dict[fn];
+            if (f) {
+                f.df.hidden = 1;
+                f.df.hidden_due_to_dependency = false;
+                const $w = f.$wrapper || $(f.wrapper);
+                if ($w && $w.length) {
+                    $w.addClass("hide hide-control").hide().css({ display: "none" });
                 }
-            });
+            }
         });
 
         // Show only current step fields
         current.fieldnames.forEach((fn) => {
             const f = this.dialog.fields_dict[fn];
             if (f) {
-                if (fn === "mandatory_reason" && !this.dialog.get_value("is_mandatory")) {
-                    f.df.hidden = 1;
+                if (fn === "mandatory_reason") {
+                    const is_mand = !!this.get_field_val("is_mandatory");
+                    f.df.hidden = is_mand ? 0 : 1;
+                    f.df.reqd = is_mand ? 1 : 0;
+                    f.df.hidden_due_to_dependency = false;
                     const $w = f.$wrapper || $(f.wrapper);
-                    if ($w && $w.length) $w.hide();
+                    if ($w && $w.length) {
+                        if (is_mand) {
+                            $w.removeClass("hide hide-control d-none").show().css({ display: "block" });
+                        } else {
+                            $w.addClass("hide hide-control").hide().css({ display: "none" });
+                        }
+                    }
                     return;
                 }
                 f.df.hidden = 0;
+                f.df.hidden_due_to_dependency = false;
                 const $w = f.$wrapper || $(f.wrapper);
-                if ($w && $w.length) $w.show();
+                if ($w && $w.length) {
+                    $w.removeClass("hide hide-control d-none").show().css({ display: "" });
+                }
             }
         });
 
@@ -702,8 +790,8 @@ genie.ChangeRequest = class ChangeRequest {
         $footer.find('[data-wiz="finish"]').toggle(is_last);
         $footer.find('#cr_dlg_foot_step').text(`Step ${this.step + 1} of ${this.steps.length}`);
 
-        // If on step 7 (Review & submit), render the review card
-        if (this.step === 6) {
+        // If on the last step (Review & submit), render the review card
+        if (is_last) {
             this.render_review_card();
         }
 
@@ -712,15 +800,8 @@ genie.ChangeRequest = class ChangeRequest {
     }
 
     render_review_card() {
-        const get_val = (fn) => {
-            const f = this.dialog.fields_dict[fn];
-            if (!f) return "";
-            if (f.get_value) {
-                const val = f.get_value();
-                if (val !== undefined && val !== null) return val;
-            }
-            return f.value || "";
-        };
+        const has_erp_head = frappe.user.has_role("ERP Head") || frappe.session.user === "Administrator";
+        const get_val = (fn) => this.get_field_val(fn);
 
         const type = get_val("type") || "—";
         const company = get_val("company") || "—";
@@ -757,6 +838,30 @@ genie.ChangeRequest = class ChangeRequest {
         const ot_hours = get_val("planned_overtime_hours") || 0;
         const assessment_line = effort ? `${effort} days · ${dev} · target ${tgt || '—'} · planned overtime ${ot_hours} h` : "Pending Enterprise Solutions assessment";
 
+        const render_html_field = (val) => {
+            if (!val || val === "—") return "—";
+            let str = String(val).trim();
+            if (str.includes("&lt;") && (str.includes("&lt;p&gt;") || str.includes("&lt;div") || str.includes("&lt;br") || str.includes("&lt;span") || str.includes("&lt;h"))) {
+                const txt = document.createElement("textarea");
+                txt.innerHTML = str;
+                str = txt.value;
+            }
+            const stripped = str.replace(/<[^>]*>/g, "").trim();
+            if (!stripped && !str.includes("<img")) return "—";
+            const clean = (typeof frappe !== "undefined" && frappe.dom?.remove_script_and_style)
+                ? frappe.dom.remove_script_and_style(str)
+                : str;
+            if (clean.includes("ql-editor")) {
+                return `<div class="ql-snow" style="line-height: 1.5;">${clean}</div>`;
+            }
+            return `<div class="ql-snow" style="line-height: 1.5;"><div class="ql-editor read-mode" style="padding: 0; min-height: auto;">${clean}</div></div>`;
+        };
+
+        const render_text_field = (val) => {
+            if (!val || val === "—") return "—";
+            return `<div style="white-space: pre-wrap; word-break: break-word; line-height: 1.5;">${frappe.utils.escape_html(String(val))}</div>`;
+        };
+
         const html = `
             <div style="
                 background: var(--card-bg, #ffffff);
@@ -776,11 +881,11 @@ genie.ChangeRequest = class ChangeRequest {
                         <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Requester</td><td>${frappe.utils.escape_html(requester_line)}</td></tr>
                         <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">System</td><td>${frappe.utils.escape_html(system)}</td></tr>
                         <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Title</td><td><b>${frappe.utils.escape_html(title)}</b></td></tr>
-                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">What is Needed</td><td>${frappe.utils.escape_html(desc)}</td></tr>
-                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Today</td><td>${frappe.utils.escape_html(today_proc)}</td></tr>
-                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Benefit</td><td>${frappe.utils.escape_html(benefit)}</td></tr>
+                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">What is Needed</td><td>${render_html_field(desc)}</td></tr>
+                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Today</td><td>${render_text_field(today_proc)}</td></tr>
+                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Benefit</td><td>${render_text_field(benefit)}</td></tr>
                         <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Size</td><td>${frappe.utils.escape_html(size_line)}</td></tr>
-                        ${is_mandatory ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Mandatory Reason</td><td>${frappe.utils.escape_html(mand_reason)}</td></tr>` : ''}
+                        ${is_mandatory ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Mandatory Reason</td><td>${render_text_field(mand_reason)}</td></tr>` : ''}
                         <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Priority Score</td><td>
                             <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:4px;">
                                 <b style="font-size:15px; color:#111827;">${score} / 100</b>
@@ -792,7 +897,7 @@ genie.ChangeRequest = class ChangeRequest {
                             </div>
                             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Impact ${impact} · Urgency ${urgency} · Reach ${reach}</div>
                         </td></tr>
-                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Assessment</td><td>${frappe.utils.escape_html(assessment_line)}</td></tr>
+                        ${has_erp_head || effort ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Assessment</td><td>${frappe.utils.escape_html(assessment_line)}</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
@@ -806,8 +911,8 @@ genie.ChangeRequest = class ChangeRequest {
     }
 
     validate_current_step() {
-        // Step 7 has no input validation
-        if (this.step === 6) return true;
+        // Last step (Review & submit) has no input validation
+        if (this.step === this.steps.length - 1) return true;
 
         const current = this.steps[this.step];
         for (const fn of current.fieldnames) {
@@ -815,14 +920,14 @@ genie.ChangeRequest = class ChangeRequest {
             if (!f || !f.df) continue;
             if (["Section Break", "Column Break", "HTML"].includes(f.df.fieldtype)) continue;
 
-            const val = f.get_value ? f.get_value() : f.value;
+            const val = this.get_field_val(fn);
             if (f.df.reqd && !val) {
                 frappe.msgprint(`Please fill <b>${f.df.label}</b>`);
                 return false;
             }
         }
 
-        if (this.dialog.get_value("is_mandatory") && !this.dialog.get_value("mandatory_reason") && current.fieldnames.includes("mandatory_reason")) {
+        if (this.get_field_val("is_mandatory") && !this.get_field_val("mandatory_reason") && current.fieldnames.includes("mandatory_reason")) {
             frappe.msgprint(__("Please fill <b>Mandatory Reason</b>"));
             return false;
         }
@@ -847,15 +952,7 @@ genie.ChangeRequest = class ChangeRequest {
     }
 
     finish() {
-        const get_val = (fn) => {
-            const f = this.dialog.fields_dict[fn];
-            if (!f) return "";
-            if (f.get_value) {
-                const val = f.get_value();
-                if (val !== undefined && val !== null) return val;
-            }
-            return f.value || "";
-        };
+        const get_val = (fn) => this.get_field_val(fn);
 
         frappe.call({
             method: "genie.utils.support.create_change_request",
