@@ -109,6 +109,19 @@ frappe.ui.form.on("Change Request", {
 
 		if (!frm.is_new()) {
 			cr_wizard_disable_and_show_default(frm);
+			cr_render_preview_tab(frm);
+
+			// Automatically select Preview tab when user opens the doc first
+			if (!frm._preview_tab_selected) {
+				frm._preview_tab_selected = true;
+				setTimeout(() => {
+					if (frm.layout?.select_tab) {
+						frm.layout.select_tab("tab_preview") || frm.layout.select_tab("Preview");
+					} else if (frm.layout?.tabs?.[0]) {
+						frm.layout.tabs[0].set_active();
+					}
+				}, 100);
+			}
 			return;
 		}
 
@@ -233,6 +246,10 @@ function cr_wizard_init(frm) {
 	frm._wiz.step = frm.is_new() ? (frm._wiz.step || 0) : 0;
 	frm._wiz.steps = CR_WIZARD_STEPS;
 
+	// Hide tabs list and select details tab during wizard
+	frm.$wrapper.find(".form-tabs-list").hide();
+	frm.layout?.select_tab?.("tab_details");
+
 	cr_wizard_mount_bar(frm);
 	cr_wizard_mount_footer_buttons(frm);
 }
@@ -297,7 +314,7 @@ function cr_wizard_mount_footer_buttons(frm) {
 		">
 			<div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-end; align-items:center;">
 				<button type="button" class="btn btn-default btn-sm" data-wiz="prev">← Previous</button>
-				<button type="button" class="btn btn-primary btn-sm" data-wiz="next">Next →</button>
+				<button type="button" class="btn btn-primary btn-sm" data-wiz="next" style="color:#000000 !important; font-weight:700;">Next →</button>
 				<button type="button" class="btn btn-success btn-sm" data-wiz="finish">✔ Finish</button>
 			</div>
 		</div>
@@ -345,6 +362,10 @@ async function cr_wizard_finish(frm) {
 	await frm.save();
 	frappe.show_alert({ message: __("Change Request Created Successfully"), indicator: "green" });
 	cr_wizard_disable_and_show_default(frm);
+	cr_render_preview_tab(frm);
+	setTimeout(() => {
+		frm.layout?.select_tab?.("tab_preview") || frm.layout?.select_tab?.("Preview");
+	}, 100);
 }
 
 /* ===============================
@@ -355,6 +376,11 @@ function cr_wizard_render(frm) {
 	const steps = frm._wiz.steps;
 	const cur_idx = frm._wiz.step;
 	const current = steps[cur_idx];
+
+	// Hide tab_preview during wizard
+	frm.toggle_display("tab_preview", false);
+	frm.toggle_display("preview_html", false);
+	frm.$wrapper.find(".form-tabs-list").hide();
 
 	// Collect all fields across steps
 	const all = new Set();
@@ -412,7 +438,7 @@ function cr_wizard_render(frm) {
 }
 
 /* ===============================
-   Review Table (Step 7)
+   Review Table (Step 7 in Wizard)
    =============================== */
 
 function cr_wizard_render_review_card(frm) {
@@ -503,6 +529,133 @@ function cr_wizard_render_review_card(frm) {
 }
 
 /* ===============================
+   Preview Tab Renderer (Saved Doc)
+   =============================== */
+
+function cr_render_preview_tab(frm) {
+	const field = frm.fields_dict.preview_html;
+	if (!field) return;
+	const $target = field.$wrapper || $(field.wrapper);
+	if (!$target || !$target.length) return;
+
+	const doc = frm.doc;
+	const type = doc.type || "—";
+	const company = doc.company || "—";
+	const dept = doc.department || "—";
+	const req_name = doc.requested_by_fullname || doc.requested_by || "—";
+	const requester_line = `${req_name} · ${dept} · ${company}`;
+	const system = doc.system_affected || "ERP";
+	const title = doc.title || "—";
+	const desc = doc.change_description || "—";
+	const today_proc = doc.current_process || "—";
+	const benefit = doc.expected_benefit || "—";
+	const date = doc.date || "—";
+
+	const users = doc.users_count || "0";
+	const freq = doc.frequency || "Daily";
+	const hours = doc.hours_spent_per_week;
+	const size_line = `${users} users · ${freq}${hours ? ' · ' + hours + ' h/week today' : ''}`;
+
+	const is_mandatory = doc.is_mandatory;
+	const mand_reason = doc.mandatory_reason || "—";
+
+	const score = doc.priority_score || 0;
+	const priority = doc.priority || "Normal";
+
+	const parse_val = (val) => {
+		try { return parseInt(String(val).split("-")[0].trim()) || 3; } catch (e) { return 3; }
+	};
+	const impact = parse_val(doc.impact_rating);
+	const urgency = parse_val(doc.urgency_rating);
+	const reach = parse_val(doc.reach_rating);
+
+	const effort = doc.effort_days;
+	const dev = doc.developer || "Unassigned";
+	const tgt = doc.target_delivery_date;
+	const ot_hours = doc.planned_overtime_hours || 0;
+	const solution = doc.solution_approach || "—";
+	const assessment_line = effort ? `${effort} days · ${dev} · target ${tgt || '—'} · planned overtime ${ot_hours} h` : "Pending Enterprise Solutions assessment";
+
+	// Attachments list
+	let attachments_html = "—";
+	if (doc.attachments && doc.attachments.length) {
+		attachments_html = doc.attachments.map(att => {
+			const fname = att.file_name || att.file || "Attachment";
+			const fpath = att.file || "#";
+			return `<a href="${frappe.utils.escape_html(fpath)}" target="_blank" class="btn btn-xs btn-default" style="margin:2px 4px 2px 0;">
+				<i class="fa fa-paperclip"></i> ${frappe.utils.escape_html(fname)}
+			</a>`;
+		}).join(" ");
+	} else if (doc.file_attachment) {
+		attachments_html = `<a href="${frappe.utils.escape_html(doc.file_attachment)}" target="_blank" class="btn btn-xs btn-default">
+			<i class="fa fa-paperclip"></i> ${frappe.utils.escape_html(doc.file_attachment)}
+		</a>`;
+	}
+
+	const status_color = {
+		"Pending": "orange",
+		"Approved": "green",
+		"Completed": "blue",
+		"Rejected": "red",
+		"In Development": "purple"
+	}[doc.status] || "gray";
+
+	const html = `
+		<div style="background: var(--card-bg, #ffffff); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; margin-bottom: 20px;">
+			<div style="padding: 14px 18px; border-bottom: 1px solid var(--border-color); background: var(--bg-light-gray, #f8fafc); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+				<div>
+					<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+						<span class="indicator ${status_color}">${frappe.utils.escape_html(doc.status || "Pending")}</span>
+						<span class="indicator ${priority === 'Critical' || priority === 'High' ? 'red' : priority === 'Normal' ? 'orange' : 'green'}">${priority}</span>
+						${is_mandatory ? '<span class="indicator red">Mandatory</span>' : ''}
+						<span style="font-size: 11px; color: var(--text-muted);">${frappe.utils.escape_html(doc.name || "")}</span>
+					</div>
+					<h4 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-color);">
+						${frappe.utils.escape_html(title)}
+					</h4>
+				</div>
+				<div>
+					<button type="button" class="btn btn-default btn-sm" onclick="cur_frm.layout.select_tab('tab_details')">
+						<i class="fa fa-pencil"></i> ${__("Edit Details")}
+					</button>
+				</div>
+			</div>
+			<table class="table table-bordered" style="margin: 0; font-size: 13px;">
+				<tbody>
+					<tr><td style="width: 180px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Type</td><td><b>${frappe.utils.escape_html(type)}</b></td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Requester</td><td>${frappe.utils.escape_html(requester_line)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">System Affected</td><td>${frappe.utils.escape_html(system)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Date</td><td>${frappe.utils.escape_html(date)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Title</td><td><b>${frappe.utils.escape_html(title)}</b></td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">What is Needed</td><td><div style="line-height: 1.5;">${doc.change_description || "—"}</div></td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">How it Works Today</td><td>${frappe.utils.escape_html(today_proc)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Expected Benefit</td><td>${frappe.utils.escape_html(benefit)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Problem Size</td><td>${frappe.utils.escape_html(size_line)}</td></tr>
+					${doc.reference_documents ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Reference Documents</td><td>${frappe.utils.escape_html(doc.reference_documents)}</td></tr>` : ''}
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Attachments</td><td>${attachments_html}</td></tr>
+					${is_mandatory ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Mandatory Reason</td><td>${frappe.utils.escape_html(mand_reason)}</td></tr>` : ''}
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Priority Score</td><td>
+						<div style="display:flex; align-items:baseline; gap:8px; margin-bottom:4px;">
+							<b style="font-size:15px; color:#111827;">${score} / 100</b>
+							<span class="indicator ${priority === 'Critical' || priority === 'High' ? 'red' : priority === 'Normal' ? 'orange' : 'green'}">${priority}</span>
+							${is_mandatory ? '<span class="indicator red">Mandatory</span>' : ''}
+						</div>
+						<div style="height:6px; background:var(--border-color, #ebf0f5); border-radius:3px; overflow:hidden; max-width:380px;">
+							<div style="height:100%; width:${score}%; background:#2563eb; border-radius:3px;"></div>
+						</div>
+						<div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Impact ${impact} · Urgency ${urgency} · Reach ${reach}</div>
+					</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Assessment</td><td>${frappe.utils.escape_html(assessment_line)}</td></tr>
+					${doc.solution_approach ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Solution Approach</td><td>${frappe.utils.escape_html(solution)}</td></tr>` : ''}
+				</tbody>
+			</table>
+		</div>
+	`;
+
+	$target.html(html);
+}
+
+/* ===============================
    Validation & Helpers
    =============================== */
 
@@ -555,6 +708,7 @@ function cr_wizard_disable_and_show_default(frm) {
 	frm.$wrapper.find("#cr_wizard_bar").remove();
 	frm.$wrapper.find("#cr_wizard_footer").remove();
 	frm.$wrapper.find("#cr_form_review_box").remove();
+	frm.$wrapper.find(".form-tabs-list").show();
 
 	(frm.meta.fields || []).forEach(df => {
 		if (!df || !df.fieldname) return;

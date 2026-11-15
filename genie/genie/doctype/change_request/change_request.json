@@ -7,6 +7,9 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "tab_preview",
+  "preview_html",
+  "tab_details",
   "section_break_type",
   "type",
   "status",
@@ -69,6 +72,21 @@
   "approved_date"
  ],
  "fields": [
+  {
+   "fieldname": "tab_preview",
+   "fieldtype": "Tab Break",
+   "label": "Preview"
+  },
+  {
+   "fieldname": "preview_html",
+   "fieldtype": "HTML",
+   "label": "Preview"
+  },
+  {
+   "fieldname": "tab_details",
+   "fieldtype": "Tab Break",
+   "label": "Details"
+  },
   {
    "fieldname": "section_break_type",
    "fieldtype": "Section Break",
