@@ -276,7 +276,8 @@ def upload_file(content):
 
 
 @frappe.whitelist()
-def get_portal_url(user=frappe.session.user):
+def get_portal_url(user=None):
+	user = user or getattr(getattr(frappe, "session", None), "user", None)
 	support_url = frappe.db.get_single_value("Genie Settings", "support_url")
 
 	try:
@@ -299,20 +300,56 @@ def get_portal_url(user=frappe.session.user):
 def create_change_request(
 	title,
 	change_description,
-	business_justification,
-	cr_type="Custom",
+	business_justification=None,
+	cr_type="Enhancement",
 	impact="Low",
 	user=None,
 	user_fullname=None,
 	file_attachment=None,
 	attachments=None,
 	department=None,
+	company=None,
+	employee=None,
+	system_affected="ERP",
+	current_process=None,
+	expected_benefit=None,
+	users_count=None,
+	frequency=None,
+	hours_spent_per_week=None,
+	reference_documents=None,
+	impact_rating=None,
+	urgency_rating=None,
+	reach_rating=None,
+	is_mandatory=0,
+	mandatory_reason=None,
+	needed_by=None,
+	reason_for_date=None,
+	effort_days=None,
+	developer=None,
+	target_delivery_date=None,
+	planned_overtime_hours=None,
+	solution_approach=None,
+	**kwargs,
 ):
-	"""Create a Change Request in Genie (status: Pending)"""
+	"""Create a Change Request in Genie (status: Pending) with ES steps details"""
 	if not user:
 		user = frappe.session.user
 	if not user_fullname:
 		user_fullname = frappe.utils.get_fullname(user)
+
+	if not company:
+		company = frappe.defaults.get_user_default("Company") or frappe.db.get_single_value("Global Defaults", "default_company")
+
+	if not employee and user:
+		emp = frappe.db.get_value("Employee", {"user_id": user}, ["name", "department", "employee_name", "company"], as_dict=True)
+		if emp:
+			employee = emp.name
+			if not department:
+				department = emp.department
+			if not user_fullname:
+				user_fullname = emp.employee_name
+			if not company:
+				company = emp.company
 
 	if isinstance(attachments, str):
 		try:
@@ -320,16 +357,44 @@ def create_change_request(
 		except Exception:
 			attachments = []
 
+	# Validate department link if present
+	if department and not frappe.db.exists("Department", department):
+		matched = frappe.db.get_value("Department", {"department_name": department})
+		if not matched and user:
+			matched = frappe.db.get_value("Employee", {"user_id": user}, "department")
+		department = matched if (matched and frappe.db.exists("Department", matched)) else None
+
 	cr_doc = frappe.get_doc({
 		"doctype": "Change Request",
 		"title": title,
 		"type": cr_type,
-		"impact": impact,
+		"impact": impact or "Low",
 		"change_description": change_description,
-		"business_justification": business_justification,
+		"business_justification": business_justification or expected_benefit or change_description,
+		"current_process": current_process,
+		"expected_benefit": expected_benefit,
 		"requested_by": user,
 		"requested_by_fullname": user_fullname,
+		"employee": employee,
 		"department": department,
+		"company": company,
+		"system_affected": system_affected or "ERP",
+		"users_count": cint(users_count) if users_count else 0,
+		"frequency": frequency or "Daily",
+		"hours_spent_per_week": flt(hours_spent_per_week) if hours_spent_per_week else 0.0,
+		"reference_documents": reference_documents,
+		"impact_rating": impact_rating or "3 - Clear saving for a team",
+		"urgency_rating": urgency_rating or "3 - This month",
+		"reach_rating": reach_rating or "3 - One department",
+		"is_mandatory": cint(is_mandatory),
+		"mandatory_reason": mandatory_reason,
+		"needed_by": needed_by,
+		"reason_for_date": reason_for_date,
+		"effort_days": flt(effort_days) if effort_days else None,
+		"developer": developer,
+		"target_delivery_date": target_delivery_date,
+		"planned_overtime_hours": flt(planned_overtime_hours) if planned_overtime_hours else None,
+		"solution_approach": solution_approach,
 		"file_attachment": file_attachment,
 		"status": "Pending",
 		"date": frappe.utils.today(),
@@ -338,15 +403,19 @@ def create_change_request(
 	if attachments and isinstance(attachments, list):
 		for item in attachments:
 			file_url = None
+			file_name = None
 			if isinstance(item, dict):
-				file_url = item.get("file")
+				file_url = item.get("file") or item.get("file_url")
+				file_name = item.get("file_name")
 			elif isinstance(item, str):
 				file_url = item
 
 			if file_url:
+				if not file_name:
+					file_name = file_url.split("/")[-1]
 				cr_doc.append("attachments", {
 					"file": file_url,
-					"file_name": file_url.split("/")[-1]
+					"file_name": file_name,
 				})
 
 	cr_doc.insert(ignore_permissions=True)

@@ -7,32 +7,80 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "title",
-  "status",
+  "section_break_type",
   "type",
-  "impact",
-  "column_break_1",
+  "status",
+  "section_break_requester",
+  "system_affected",
+  "company",
+  "employee",
   "requested_by",
   "requested_by_fullname",
   "department",
   "date",
   "section_break_crdetail",
+  "title",
   "change_description",
+  "current_process",
+  "expected_benefit",
   "business_justification",
-  "section_break_attachment",
+  "section_break_size",
+  "users_count",
+  "frequency",
+  "column_break_size",
+  "hours_spent_per_week",
+  "reference_documents",
   "attachments",
   "file_attachment",
+  "section_break_priority",
+  "impact_rating",
+  "urgency_rating",
+  "reach_rating",
+  "is_mandatory",
+  "mandatory_reason",
+  "column_break_prio",
+  "needed_by",
+  "reason_for_date",
+  "priority_score",
+  "priority",
+  "impact",
+  "section_break_assessment",
+  "effort_days",
+  "developer",
+  "target_delivery_date",
+  "planned_overtime_hours",
+  "column_break_timeline",
+  "start_date",
+  "training_date",
+  "solution_approach",
+  "section_break_delivery",
+  "testing_notes",
+  "actual_training_date",
+  "users_trained",
+  "training_accepted",
+  "column_break_enforce",
+  "enforced_from",
+  "old_process_stopped",
+  "enforcement_notes",
   "section_break_opero",
   "opero_cr_id",
   "approved_by",
+  "column_break_opero",
   "approved_date"
  ],
  "fields": [
   {
-   "fieldname": "title",
-   "fieldtype": "Data",
+   "fieldname": "section_break_type",
+   "fieldtype": "Section Break",
+   "label": "Request Type"
+  },
+  {
+   "description": "Pick the one that fits best. Enterprise Solutions can change it later.",
+   "fieldname": "type",
+   "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Title",
+   "label": "Type",
+   "options": "\nNew development\nEnhancement\nMinor change\nCustom\nINT\nConfig",
    "reqd": 1
   },
   {
@@ -41,25 +89,41 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Pending\nApproved\nCompleted"
+   "options": "Pending\nDept. Head Review\nES Review\nAyman Approval\nCEO Approval\nClarification Needed\nApproved - To Schedule\nTimeline Confirmation\nIn Development\nUser Testing\nDelivery Sign-off\nTraining & Acceptance\nEnforcement\nApproved\nCompleted\nRejected"
   },
   {
-   "fieldname": "type",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Type",
-   "options": "Custom\nINT\nConfig"
+   "fieldname": "section_break_requester",
+   "fieldtype": "Section Break",
+   "label": "Requester & Scope"
   },
   {
-   "fieldname": "impact",
-   "fieldtype": "Select",
+   "default": "ERP",
+   "description": "System affected (e.g. ERP, Takamul, FSM, etc.)",
+   "fieldname": "system_affected",
+   "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Impact",
-   "options": "Low\nMedium\nHigh"
+   "label": "System Affected",
+   "reqd": 1
   },
   {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
+  },
+  {
+   "description": "The company decides the approval route",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "description": "Employee ID of the requester",
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee"
   },
   {
    "fieldname": "requested_by",
@@ -74,10 +138,12 @@
    "label": "Requested By Full Name"
   },
   {
+   "description": "Department of the requester",
    "fieldname": "department",
    "fieldtype": "Link",
    "label": "Department",
-   "options": "Department"
+   "options": "Department",
+   "reqd": 1
   },
   {
    "fieldname": "date",
@@ -87,24 +153,76 @@
   {
    "fieldname": "section_break_crdetail",
    "fieldtype": "Section Break",
-   "label": "Change Details"
+   "label": "Requirement Details"
   },
   {
+   "description": "e.g. Add approval step for purchase requests above QAR 50,000",
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "description": "Screens, fields, steps, approvals or reports you need",
    "fieldname": "change_description",
    "fieldtype": "Text Editor",
-   "label": "Change Description",
+   "label": "What is Needed",
+   "reqd": 1
+  },
+  {
+   "description": "Current process, tools and the problem with it",
+   "fieldname": "current_process",
+   "fieldtype": "Small Text",
+   "label": "How it Works Today",
+   "reqd": 1
+  },
+  {
+   "description": "Time saved, errors avoided, control gained",
+   "fieldname": "expected_benefit",
+   "fieldtype": "Small Text",
+   "label": "Expected Benefit",
    "reqd": 1
   },
   {
    "fieldname": "business_justification",
    "fieldtype": "Text Editor",
-   "label": "Business Justification",
+   "label": "Business Justification"
+  },
+  {
+   "fieldname": "section_break_size",
+   "fieldtype": "Section Break",
+   "label": "Problem Size & Attachments"
+  },
+  {
+   "description": "People who will use it",
+   "fieldname": "users_count",
+   "fieldtype": "Int",
+   "label": "Number of Users",
    "reqd": 1
   },
   {
-   "fieldname": "section_break_attachment",
-   "fieldtype": "Section Break",
-   "label": "Attachments"
+   "description": "How often the process runs",
+   "fieldname": "frequency",
+   "fieldtype": "Select",
+   "label": "How Often Process Runs",
+   "options": "\nSeveral times a day\nDaily\nWeekly\nMonthly\nQuarterly or less"
+  },
+  {
+   "fieldname": "column_break_size",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Across everyone involved",
+   "fieldname": "hours_spent_per_week",
+   "fieldtype": "Float",
+   "label": "Hours Spent Per Week Today"
+  },
+  {
+   "description": "Form names, sample reports, links",
+   "fieldname": "reference_documents",
+   "fieldtype": "Small Text",
+   "label": "Reference Documents"
   },
   {
    "fieldname": "attachments",
@@ -119,9 +237,187 @@
    "label": "File Attachment"
   },
   {
+   "fieldname": "section_break_priority",
+   "fieldtype": "Section Break",
+   "label": "Importance & Priority Scoring"
+  },
+  {
+   "description": "Business impact on operations, cost, or revenue",
+   "fieldname": "impact_rating",
+   "fieldtype": "Select",
+   "label": "Business Impact",
+   "options": "\n1 - Minor convenience\n2 - Small saving\n3 - Clear saving for a team\n4 - Major cost or time saving\n5 - Critical to operations or revenue",
+   "reqd": 1
+  },
+  {
+   "description": "Timeline urgency for business operations",
+   "fieldname": "urgency_rating",
+   "fieldtype": "Select",
+   "label": "Urgency",
+   "options": "\n1 - Whenever possible\n2 - This quarter\n3 - This month\n4 - Within two weeks\n5 - Blocking work now",
+   "reqd": 1
+  },
+  {
+   "description": "Scope of users and departments affected",
+   "fieldname": "reach_rating",
+   "fieldtype": "Select",
+   "label": "Reach",
+   "options": "\n1 - One person\n2 - One team\n3 - One department\n4 - One company\n5 - Several companies / group",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Yes · audit, legal, ISO, contract, management order",
+   "fieldname": "is_mandatory",
+   "fieldtype": "Check",
+   "label": "Mandatory (audit, legal, ISO, contract, management order)"
+  },
+  {
+   "depends_on": "eval:doc.is_mandatory==1",
+   "description": "Audit finding, ISO clause, contract, management order",
+   "fieldname": "mandatory_reason",
+   "fieldtype": "Small Text",
+   "label": "Mandatory Reason"
+  },
+  {
+   "fieldname": "column_break_prio",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Target date needed by",
+   "fieldname": "needed_by",
+   "fieldtype": "Date",
+   "label": "Needed By"
+  },
+  {
+   "description": "e.g. Year-end closing",
+   "fieldname": "reason_for_date",
+   "fieldtype": "Data",
+   "label": "Reason for the Date"
+  },
+  {
+   "fieldname": "priority_score",
+   "fieldtype": "Int",
+   "label": "Priority Score (0-100)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Priority Level",
+   "options": "Low\nNormal\nHigh\nCritical",
+   "read_only": 1
+  },
+  {
+   "fieldname": "impact",
+   "fieldtype": "Select",
+   "label": "Opero Impact Rating",
+   "options": "Low\nMedium\nHigh",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_assessment",
+   "fieldtype": "Section Break",
+   "label": "Assessment & Timeline"
+  },
+  {
+   "description": "Effort in working days",
+   "fieldname": "effort_days",
+   "fieldtype": "Float",
+   "label": "Effort (Working Days)"
+  },
+  {
+   "description": "Assigned developer",
+   "fieldname": "developer",
+   "fieldtype": "Data",
+   "label": "Assigned Developer"
+  },
+  {
+   "description": "Target delivery date",
+   "fieldname": "target_delivery_date",
+   "fieldtype": "Date",
+   "label": "Target Delivery Date"
+  },
+  {
+   "description": "Planned overtime in hours",
+   "fieldname": "planned_overtime_hours",
+   "fieldtype": "Float",
+   "label": "Planned Overtime (Hours)"
+  },
+  {
+   "fieldname": "column_break_timeline",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date"
+  },
+  {
+   "fieldname": "training_date",
+   "fieldtype": "Date",
+   "label": "Target Training Date"
+  },
+  {
+   "description": "Scope, approach, dependencies, risks",
+   "fieldname": "solution_approach",
+   "fieldtype": "Small Text",
+   "label": "Solution Approach / Note for Approvers"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_delivery",
+   "fieldtype": "Section Break",
+   "label": "Delivery, Training & Enforcement"
+  },
+  {
+   "fieldname": "testing_notes",
+   "fieldtype": "Small Text",
+   "label": "User Testing Notes"
+  },
+  {
+   "fieldname": "actual_training_date",
+   "fieldtype": "Date",
+   "label": "Actual Training Date"
+  },
+  {
+   "fieldname": "users_trained",
+   "fieldtype": "Int",
+   "label": "Users Trained Count"
+  },
+  {
+   "default": "0",
+   "fieldname": "training_accepted",
+   "fieldtype": "Check",
+   "label": "Users Can Work Without Help"
+  },
+  {
+   "fieldname": "column_break_enforce",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "enforced_from",
+   "fieldtype": "Date",
+   "label": "Enforced From Date"
+  },
+  {
+   "default": "0",
+   "fieldname": "old_process_stopped",
+   "fieldtype": "Check",
+   "label": "Old Process Stopped"
+  },
+  {
+   "fieldname": "enforcement_notes",
+   "fieldtype": "Small Text",
+   "label": "Enforcement Notes"
+  },
+  {
+   "collapsible": 1,
    "fieldname": "section_break_opero",
    "fieldtype": "Section Break",
-   "label": "Opero Sync"
+   "label": "Opero Sync & Approvals"
   },
   {
    "fieldname": "opero_cr_id",
@@ -137,6 +433,10 @@
    "read_only": 1
   },
   {
+   "fieldname": "column_break_opero",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "approved_date",
    "fieldtype": "Date",
    "label": "Approved Date",
@@ -146,7 +446,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-09-02 02:45:00.000000",
+ "modified": "2026-11-12 11:00:00.000000",
  "modified_by": "Administrator",
  "module": "Genie",
  "name": "Change Request",
