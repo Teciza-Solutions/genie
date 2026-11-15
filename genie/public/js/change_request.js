@@ -576,7 +576,7 @@ genie.ChangeRequest = class ChangeRequest {
                         </span>
                     </div>
                     <div>
-                        <button type="button" class="btn btn-primary btn-sm" data-wiz="next" style="color:#000000 !important; font-weight:700;">Next →</button>
+                        <button type="button" class="btn btn-primary btn-sm" data-wiz="next">Next →</button>
                         <button type="button" class="btn btn-success btn-sm" data-wiz="finish">
                             ✔ Submit
                         </button>

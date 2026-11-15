@@ -314,7 +314,7 @@ function cr_wizard_mount_footer_buttons(frm) {
 		">
 			<div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-end; align-items:center;">
 				<button type="button" class="btn btn-default btn-sm" data-wiz="prev">← Previous</button>
-				<button type="button" class="btn btn-primary btn-sm" data-wiz="next" style="color:#000000 !important; font-weight:700;">Next →</button>
+				<button type="button" class="btn btn-primary btn-sm" data-wiz="next">Next →</button>
 				<button type="button" class="btn btn-success btn-sm" data-wiz="finish">✔ Finish</button>
 			</div>
 		</div>
