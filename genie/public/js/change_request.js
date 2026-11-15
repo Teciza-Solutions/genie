@@ -85,8 +85,9 @@ genie.ChangeRequest = class ChangeRequest {
 
     async setup_dialog() {
         const default_company = frappe.defaults.get_user_default("Company") || frappe.defaults.get_default("company") || "";
+        const has_erp_head = frappe.user.has_role("ERP Head") || frappe.session.user === "Administrator";
 
-        this.steps = [
+        const all_steps = [
             {
                 key: "type",
                 label: "Type",
@@ -139,6 +140,7 @@ genie.ChangeRequest = class ChangeRequest {
                 label: "Assessment",
                 title: __("Enterprise Solutions assessment"),
                 help: __("Approvers see this when they decide."),
+                for_role: "ERP Head",
                 fieldnames: [
                     "sec_step6", "effort_days", "developer", "col_break_6",
                     "target_delivery_date", "planned_overtime_hours", "solution_approach"
@@ -152,6 +154,8 @@ genie.ChangeRequest = class ChangeRequest {
                 fieldnames: ["sec_step7", "review_html"]
             }
         ];
+
+        this.steps = all_steps.filter(s => !s.for_role || (s.for_role === "ERP Head" && has_erp_head));
 
         this.dialog = new frappe.ui.Dialog({
             title: __("New Change Request"),
@@ -167,7 +171,7 @@ genie.ChangeRequest = class ChangeRequest {
                     fieldname: "type",
                     label: __("Type"),
                     fieldtype: "Select",
-                    options: "\nNew development\nEnhancement\nMinor change\nCustom\nINT\nConfig",
+                    options: "\nNew development\nEnhancement\nMinor change",
                     description: __("Pick the one that fits best. Enterprise Solutions can change it later."),
                     reqd: 1,
                 },
@@ -373,7 +377,6 @@ genie.ChangeRequest = class ChangeRequest {
                     label: __("Mandatory Reason"),
                     fieldtype: "Small Text",
                     description: __("Audit finding, ISO clause, contract, management order"),
-                    depends_on: "eval:doc.is_mandatory==1",
                 },
                 {
                     fieldname: "col_break_5",
@@ -576,8 +579,8 @@ genie.ChangeRequest = class ChangeRequest {
                         </span>
                     </div>
                     <div>
-                        <button type="button" class="btn btn-primary btn-sm" data-wiz="next">Next →</button>
-                        <button type="button" class="btn btn-success btn-sm" data-wiz="finish">
+                        <button type="button" class="btn btn-primary btn-sm" data-wiz="next" style="color: #ffffff !important;">Next →</button>
+                        <button type="button" class="btn btn-success btn-sm" data-wiz="finish" style="color: #ffffff !important;">
                             ✔ Submit
                         </button>
                     </div>
@@ -628,6 +631,28 @@ genie.ChangeRequest = class ChangeRequest {
             this.dialog.set_value("priority", priority);
         };
 
+        const toggle_mandatory_reason = (val) => {
+            const is_mand = val !== undefined ? !!val : !!this.dialog.get_value("is_mandatory");
+            const f_reason = this.dialog.fields_dict.mandatory_reason;
+            if (f_reason) {
+                f_reason.df.hidden = is_mand ? 0 : 1;
+                f_reason.df.reqd = is_mand ? 1 : 0;
+                f_reason.df.hidden_due_to_dependency = false;
+                const $w = f_reason.$wrapper || $(f_reason.wrapper);
+                if ($w && $w.length) {
+                    if (is_mand) {
+                        $w.removeClass("hide hide-control d-none").show().css({ display: "block" });
+                    } else {
+                        $w.addClass("hide hide-control").hide().css({ display: "none" });
+                    }
+                }
+                if (f_reason.refresh) f_reason.refresh();
+                if (is_mand && $w && $w.length) {
+                    $w.removeClass("hide hide-control d-none").show().css({ display: "block" });
+                }
+            }
+        };
+
         const f_imp = this.dialog.fields_dict.impact_rating;
         const f_urg = this.dialog.fields_dict.urgency_rating;
         const f_rea = this.dialog.fields_dict.reach_rating;
@@ -636,7 +661,20 @@ genie.ChangeRequest = class ChangeRequest {
         if (f_imp && f_imp.$input) f_imp.$input.on("change", update_priority);
         if (f_urg && f_urg.$input) f_urg.$input.on("change", update_priority);
         if (f_rea && f_rea.$input) f_rea.$input.on("change", update_priority);
-        if (f_man && f_man.$input) f_man.$input.on("change", update_priority);
+
+        if (f_man) {
+            const handle_man = () => {
+                setTimeout(() => {
+                    const is_checked = f_man.$input ? f_man.$input.is(":checked") : !!this.dialog.get_value("is_mandatory");
+                    this.dialog.set_value("is_mandatory", is_checked ? 1 : 0);
+                    update_priority();
+                    toggle_mandatory_reason(is_checked);
+                }, 10);
+            };
+            if (f_man.$input) f_man.$input.on("change click input", handle_man);
+            if (f_man.$wrapper) f_man.$wrapper.on("change click input", "input", handle_man);
+            f_man.df.onchange = handle_man;
+        }
 
         // Employee change listener
         const f_emp = this.dialog.fields_dict.employee;
@@ -656,8 +694,11 @@ genie.ChangeRequest = class ChangeRequest {
                 const f = this.dialog.fields_dict[fn];
                 if (f) {
                     f.df.hidden = 1;
+                    f.df.hidden_due_to_dependency = false;
                     const $w = f.$wrapper || $(f.wrapper);
-                    if ($w && $w.length) $w.hide();
+                    if ($w && $w.length) {
+                        $w.addClass("hide hide-control").hide().css({ display: "none" });
+                    }
                 }
             });
         });
@@ -666,15 +707,35 @@ genie.ChangeRequest = class ChangeRequest {
         current.fieldnames.forEach((fn) => {
             const f = this.dialog.fields_dict[fn];
             if (f) {
-                if (fn === "mandatory_reason" && !this.dialog.get_value("is_mandatory")) {
-                    f.df.hidden = 1;
+                if (fn === "mandatory_reason") {
+                    const is_mand = !!this.dialog.get_value("is_mandatory");
+                    f.df.hidden = is_mand ? 0 : 1;
+                    f.df.reqd = is_mand ? 1 : 0;
+                    f.df.hidden_due_to_dependency = false;
                     const $w = f.$wrapper || $(f.wrapper);
-                    if ($w && $w.length) $w.hide();
+                    if ($w && $w.length) {
+                        if (is_mand) {
+                            $w.removeClass("hide hide-control d-none").show().css({ display: "block" });
+                        } else {
+                            $w.addClass("hide hide-control").hide().css({ display: "none" });
+                        }
+                    }
+                    if (f.refresh) f.refresh();
+                    if (is_mand && $w && $w.length) {
+                        $w.removeClass("hide hide-control d-none").show().css({ display: "block" });
+                    }
                     return;
                 }
                 f.df.hidden = 0;
+                f.df.hidden_due_to_dependency = false;
                 const $w = f.$wrapper || $(f.wrapper);
-                if ($w && $w.length) $w.show();
+                if ($w && $w.length) {
+                    $w.removeClass("hide hide-control d-none").show().css({ display: "" });
+                }
+                if (f.refresh) f.refresh();
+                if ($w && $w.length) {
+                    $w.removeClass("hide hide-control d-none").show().css({ display: "" });
+                }
             }
         });
 
@@ -702,8 +763,8 @@ genie.ChangeRequest = class ChangeRequest {
         $footer.find('[data-wiz="finish"]').toggle(is_last);
         $footer.find('#cr_dlg_foot_step').text(`Step ${this.step + 1} of ${this.steps.length}`);
 
-        // If on step 7 (Review & submit), render the review card
-        if (this.step === 6) {
+        // If on the last step (Review & submit), render the review card
+        if (is_last) {
             this.render_review_card();
         }
 
@@ -712,6 +773,7 @@ genie.ChangeRequest = class ChangeRequest {
     }
 
     render_review_card() {
+        const has_erp_head = frappe.user.has_role("ERP Head") || frappe.session.user === "Administrator";
         const get_val = (fn) => {
             const f = this.dialog.fields_dict[fn];
             if (!f) return "";
@@ -792,7 +854,7 @@ genie.ChangeRequest = class ChangeRequest {
                             </div>
                             <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Impact ${impact} · Urgency ${urgency} · Reach ${reach}</div>
                         </td></tr>
-                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Assessment</td><td>${frappe.utils.escape_html(assessment_line)}</td></tr>
+                        ${has_erp_head || effort ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Assessment</td><td>${frappe.utils.escape_html(assessment_line)}</td></tr>` : ''}
                     </tbody>
                 </table>
             </div>
@@ -806,8 +868,8 @@ genie.ChangeRequest = class ChangeRequest {
     }
 
     validate_current_step() {
-        // Step 7 has no input validation
-        if (this.step === 6) return true;
+        // Last step (Review & submit) has no input validation
+        if (this.step === this.steps.length - 1) return true;
 
         const current = this.steps[this.step];
         for (const fn of current.fieldnames) {

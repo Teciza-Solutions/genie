@@ -8,7 +8,7 @@ const CR_WIZARD_SKIP_SECTIONS = [
 	"Opero Sync & Approvals"
 ];
 
-const CR_WIZARD_STEPS = [
+const CR_WIZARD_STEPS_BASE = [
 	{
 		label: "Type",
 		title: "What kind of request is it?",
@@ -60,6 +60,7 @@ const CR_WIZARD_STEPS = [
 		label: "Assessment",
 		title: "Enterprise Solutions assessment",
 		help: "Approvers see this when they decide.",
+		for_role: "ERP Head",
 		section_fieldname: "section_break_assessment",
 		fieldnames: [
 			"section_break_assessment", "effort_days", "developer", "target_delivery_date",
@@ -101,6 +102,8 @@ frappe.ui.form.on("Change Request", {
 	},
 
 	refresh(frm) {
+		const has_erp_head = frappe.user.has_role("ERP Head") || frappe.session.user === "Administrator";
+
 		frm.add_custom_button(__("Request Change Dialog"), () => {
 			new genie.ChangeRequest();
 		});
@@ -110,6 +113,20 @@ frappe.ui.form.on("Change Request", {
 		if (!frm.is_new()) {
 			cr_wizard_disable_and_show_default(frm);
 			cr_render_preview_tab(frm);
+
+			// Hide assessment section from non-ERP-Head on existing doc
+			if (!has_erp_head) {
+				frm.toggle_display("section_break_assessment", false);
+				[
+					"effort_days", "developer", "target_delivery_date",
+					"planned_overtime_hours", "column_break_timeline",
+					"start_date", "training_date", "solution_approach"
+				].forEach(fn => frm.toggle_display(fn, false));
+			}
+
+			// Mandatory reason display on existing doc
+			frm.toggle_display("mandatory_reason", !!frm.doc.is_mandatory);
+			frm.toggle_reqd("mandatory_reason", !!frm.doc.is_mandatory);
 
 			// Automatically select Preview tab when user opens the doc first
 			if (!frm._preview_tab_selected) {
@@ -168,6 +185,8 @@ frappe.ui.form.on("Change Request", {
 	},
 	is_mandatory(frm) {
 		cr_calculate_priority(frm);
+		frm.toggle_display("mandatory_reason", !!frm.doc.is_mandatory);
+		frm.toggle_reqd("mandatory_reason", !!frm.doc.is_mandatory);
 	}
 });
 
@@ -242,9 +261,10 @@ function cr_calculate_priority(frm) {
    =============================== */
 
 function cr_wizard_init(frm) {
+	const has_erp_head = frappe.user.has_role("ERP Head") || frappe.session.user === "Administrator";
 	frm._wiz = frm._wiz || {};
 	frm._wiz.step = frm.is_new() ? (frm._wiz.step || 0) : 0;
-	frm._wiz.steps = CR_WIZARD_STEPS;
+	frm._wiz.steps = CR_WIZARD_STEPS_BASE.filter(s => !s.for_role || (s.for_role === "ERP Head" && has_erp_head));
 
 	// Hide tabs list and select details tab during wizard
 	frm.$wrapper.find(".form-tabs-list").hide();
@@ -314,8 +334,8 @@ function cr_wizard_mount_footer_buttons(frm) {
 		">
 			<div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-end; align-items:center;">
 				<button type="button" class="btn btn-default btn-sm" data-wiz="prev">← Previous</button>
-				<button type="button" class="btn btn-primary btn-sm" data-wiz="next">Next →</button>
-				<button type="button" class="btn btn-success btn-sm" data-wiz="finish">✔ Finish</button>
+				<button type="button" class="btn btn-primary btn-sm" data-wiz="next" style="color: #ffffff !important;">Next →</button>
+				<button type="button" class="btn btn-success btn-sm" data-wiz="finish" style="color: #ffffff !important;">✔ Finish</button>
 			</div>
 		</div>
 	`);
@@ -376,6 +396,7 @@ function cr_wizard_render(frm) {
 	const steps = frm._wiz.steps;
 	const cur_idx = frm._wiz.step;
 	const current = steps[cur_idx];
+	const has_erp_head = frappe.user.has_role("ERP Head") || frappe.session.user === "Administrator";
 
 	// Hide tab_preview during wizard
 	frm.toggle_display("tab_preview", false);
@@ -391,31 +412,50 @@ function cr_wizard_render(frm) {
 	const fields = frm.meta.fields || [];
 	let in_skipped = false;
 
+	const skip_sections = [...CR_WIZARD_SKIP_SECTIONS];
+	if (!has_erp_head) {
+		skip_sections.push("section_break_assessment", "Assessment", "Enterprise Solutions assessment");
+	}
+
 	fields.forEach(df => {
 		if (df.fieldtype === "Section Break") {
 			const label = df.label || "";
 			const fname = df.fieldname || "";
-			in_skipped = CR_WIZARD_SKIP_SECTIONS.includes(label) || CR_WIZARD_SKIP_SECTIONS.includes(fname);
+			in_skipped = skip_sections.includes(label) || skip_sections.includes(fname);
 		}
 		if (in_skipped && df.fieldname) {
 			skipped_fields.add(df.fieldname);
 		}
 	});
 
+	if (!has_erp_head) {
+		[
+			"section_break_assessment", "effort_days", "developer", "target_delivery_date",
+			"planned_overtime_hours", "column_break_timeline", "start_date", "training_date", "solution_approach"
+		].forEach(fn => skipped_fields.add(fn));
+	}
+
 	// Hide all fields
 	all.forEach(f => frm.toggle_display(f, false));
 	skipped_fields.forEach(f => frm.toggle_display(f, false));
 	frm.toggle_display("status", false);
 
-	// Show current step fields (if step 0 to 5)
-	if (cur_idx < 6) {
+	// Show current step fields (if not final review step)
+	if (cur_idx < steps.length - 1) {
 		frm.$wrapper.find('#cr_form_review_box').remove();
-		current.fieldnames.forEach(f => frm.toggle_display(f, true));
+		current.fieldnames.forEach(f => {
+			if (f === "mandatory_reason") {
+				frm.toggle_display(f, !!frm.doc.is_mandatory);
+				frm.toggle_reqd(f, !!frm.doc.is_mandatory);
+			} else {
+				frm.toggle_display(f, true);
+			}
+		});
 		if (current.section_fieldname) {
 			auto_expand_section(frm, current.section_fieldname, true);
 		}
 	} else {
-		// STEP 7: Final Review Table
+		// Final Review Table
 		cr_wizard_render_review_card(frm);
 	}
 
@@ -448,6 +488,7 @@ function cr_wizard_render_review_card(frm) {
 		frm.$wrapper.find(".form-layout").append($box);
 	}
 
+	const has_erp_head = frappe.user.has_role("ERP Head") || frappe.session.user === "Administrator";
 	const doc = frm.doc;
 	const type = doc.type || "—";
 	const company = doc.company || "—";
@@ -519,7 +560,7 @@ function cr_wizard_render_review_card(frm) {
 						</div>
 						<div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Impact ${impact} · Urgency ${urgency} · Reach ${reach}</div>
 					</td></tr>
-					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Assessment</td><td>${frappe.utils.escape_html(assessment_line)}</td></tr>
+					${has_erp_head || effort ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Assessment</td><td>${frappe.utils.escape_html(assessment_line)}</td></tr>` : ''}
 				</tbody>
 			</table>
 		</div>
@@ -538,6 +579,7 @@ function cr_render_preview_tab(frm) {
 	const $target = field.$wrapper || $(field.wrapper);
 	if (!$target || !$target.length) return;
 
+	const has_erp_head = frappe.user.has_role("ERP Head") || frappe.session.user === "Administrator";
 	const doc = frm.doc;
 	const type = doc.type || "—";
 	const company = doc.company || "—";
@@ -645,8 +687,8 @@ function cr_render_preview_tab(frm) {
 						</div>
 						<div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Impact ${impact} · Urgency ${urgency} · Reach ${reach}</div>
 					</td></tr>
-					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Assessment</td><td>${frappe.utils.escape_html(assessment_line)}</td></tr>
-					${doc.solution_approach ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Solution Approach</td><td>${frappe.utils.escape_html(solution)}</td></tr>` : ''}
+					${has_erp_head || effort ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Assessment</td><td>${frappe.utils.escape_html(assessment_line)}</td></tr>` : ''}
+					${(has_erp_head || solution !== "—") && doc.solution_approach ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Solution Approach</td><td>${frappe.utils.escape_html(solution)}</td></tr>` : ''}
 				</tbody>
 			</table>
 		</div>
@@ -671,7 +713,7 @@ function auto_expand_section(frm, fieldname, force = false) {
 }
 
 function cr_wizard_validate_current_step(frm) {
-	if (frm._wiz.step === 6) return true; // review step has no input fields
+	if (frm._wiz.step === frm._wiz.steps.length - 1) return true; // review step has no input fields
 
 	const current = frm._wiz.steps[frm._wiz.step];
 	for (const fn of current.fieldnames) {
@@ -705,6 +747,7 @@ function cr_wizard_hide_hidden_fields(frm) {
 }
 
 function cr_wizard_disable_and_show_default(frm) {
+	const has_erp_head = frappe.user.has_role("ERP Head") || frappe.session.user === "Administrator";
 	frm.$wrapper.find("#cr_wizard_bar").remove();
 	frm.$wrapper.find("#cr_wizard_footer").remove();
 	frm.$wrapper.find("#cr_form_review_box").remove();
@@ -714,6 +757,15 @@ function cr_wizard_disable_and_show_default(frm) {
 		if (!df || !df.fieldname) return;
 		try { frm.toggle_display(df.fieldname, true); } catch (e) {}
 	});
+
+	if (!has_erp_head) {
+		frm.toggle_display("section_break_assessment", false);
+		[
+			"effort_days", "developer", "target_delivery_date",
+			"planned_overtime_hours", "column_break_timeline",
+			"start_date", "training_date", "solution_approach"
+		].forEach(fn => frm.toggle_display(fn, false));
+	}
 
 	cr_wizard_hide_hidden_fields(frm);
 	frm._wiz_inited = false;

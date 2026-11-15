@@ -357,6 +357,14 @@ def create_change_request(
 		except Exception:
 			attachments = []
 
+	has_erp_head = "ERP Head" in frappe.get_roles(user) or user == "Administrator"
+	if not has_erp_head:
+		effort_days = None
+		developer = None
+		target_delivery_date = None
+		planned_overtime_hours = None
+		solution_approach = None
+
 	# Validate department link if present
 	if department and not frappe.db.exists("Department", department):
 		matched = frappe.db.get_value("Department", {"department_name": department})
