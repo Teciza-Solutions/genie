@@ -838,6 +838,30 @@ genie.ChangeRequest = class ChangeRequest {
         const ot_hours = get_val("planned_overtime_hours") || 0;
         const assessment_line = effort ? `${effort} days · ${dev} · target ${tgt || '—'} · planned overtime ${ot_hours} h` : "Pending Enterprise Solutions assessment";
 
+        const render_html_field = (val) => {
+            if (!val || val === "—") return "—";
+            let str = String(val).trim();
+            if (str.includes("&lt;") && (str.includes("&lt;p&gt;") || str.includes("&lt;div") || str.includes("&lt;br") || str.includes("&lt;span") || str.includes("&lt;h"))) {
+                const txt = document.createElement("textarea");
+                txt.innerHTML = str;
+                str = txt.value;
+            }
+            const stripped = str.replace(/<[^>]*>/g, "").trim();
+            if (!stripped && !str.includes("<img")) return "—";
+            const clean = (typeof frappe !== "undefined" && frappe.dom?.remove_script_and_style)
+                ? frappe.dom.remove_script_and_style(str)
+                : str;
+            if (clean.includes("ql-editor")) {
+                return `<div class="ql-snow" style="line-height: 1.5;">${clean}</div>`;
+            }
+            return `<div class="ql-snow" style="line-height: 1.5;"><div class="ql-editor read-mode" style="padding: 0; min-height: auto;">${clean}</div></div>`;
+        };
+
+        const render_text_field = (val) => {
+            if (!val || val === "—") return "—";
+            return `<div style="white-space: pre-wrap; word-break: break-word; line-height: 1.5;">${frappe.utils.escape_html(String(val))}</div>`;
+        };
+
         const html = `
             <div style="
                 background: var(--card-bg, #ffffff);
@@ -857,11 +881,11 @@ genie.ChangeRequest = class ChangeRequest {
                         <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Requester</td><td>${frappe.utils.escape_html(requester_line)}</td></tr>
                         <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">System</td><td>${frappe.utils.escape_html(system)}</td></tr>
                         <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Title</td><td><b>${frappe.utils.escape_html(title)}</b></td></tr>
-                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">What is Needed</td><td>${frappe.utils.escape_html(desc)}</td></tr>
-                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Today</td><td>${frappe.utils.escape_html(today_proc)}</td></tr>
-                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Benefit</td><td>${frappe.utils.escape_html(benefit)}</td></tr>
+                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">What is Needed</td><td>${render_html_field(desc)}</td></tr>
+                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Today</td><td>${render_text_field(today_proc)}</td></tr>
+                        <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Benefit</td><td>${render_text_field(benefit)}</td></tr>
                         <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Size</td><td>${frappe.utils.escape_html(size_line)}</td></tr>
-                        ${is_mandatory ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Mandatory Reason</td><td>${frappe.utils.escape_html(mand_reason)}</td></tr>` : ''}
+                        ${is_mandatory ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Mandatory Reason</td><td>${render_text_field(mand_reason)}</td></tr>` : ''}
                         <tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Priority Score</td><td>
                             <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:4px;">
                                 <b style="font-size:15px; color:#111827;">${score} / 100</b>

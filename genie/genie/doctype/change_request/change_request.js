@@ -478,6 +478,36 @@ function cr_wizard_render(frm) {
 }
 
 /* ===============================
+   HTML & Text Render Helpers
+   =============================== */
+
+function cr_render_html_field(val) {
+	if (!val || val === "—") return "—";
+	let str = String(val).trim();
+	if (str.includes("&lt;") && (str.includes("&lt;p&gt;") || str.includes("&lt;div") || str.includes("&lt;br") || str.includes("&lt;span") || str.includes("&lt;h"))) {
+		const txt = document.createElement("textarea");
+		txt.innerHTML = str;
+		str = txt.value;
+	}
+	const stripped = str.replace(/<[^>]*>/g, "").trim();
+	if (!stripped && !str.includes("<img")) return "—";
+
+	const clean = (typeof frappe !== "undefined" && frappe.dom?.remove_script_and_style)
+		? frappe.dom.remove_script_and_style(str)
+		: str;
+
+	if (clean.includes("ql-editor")) {
+		return `<div class="ql-snow" style="line-height: 1.5;">${clean}</div>`;
+	}
+	return `<div class="ql-snow" style="line-height: 1.5;"><div class="ql-editor read-mode" style="padding: 0; min-height: auto;">${clean}</div></div>`;
+}
+
+function cr_render_text_field(val) {
+	if (!val || val === "—") return "—";
+	return `<div style="white-space: pre-wrap; word-break: break-word; line-height: 1.5;">${frappe.utils.escape_html(String(val))}</div>`;
+}
+
+/* ===============================
    Review Table (Step 7 in Wizard)
    =============================== */
 
@@ -544,11 +574,11 @@ function cr_wizard_render_review_card(frm) {
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Requester</td><td>${frappe.utils.escape_html(requester_line)}</td></tr>
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">System</td><td>${frappe.utils.escape_html(system)}</td></tr>
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Title</td><td><b>${frappe.utils.escape_html(title)}</b></td></tr>
-					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">What is Needed</td><td>${frappe.utils.escape_html(desc)}</td></tr>
-					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Today</td><td>${frappe.utils.escape_html(today_proc)}</td></tr>
-					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Benefit</td><td>${frappe.utils.escape_html(benefit)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">What is Needed</td><td>${cr_render_html_field(desc)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Today</td><td>${cr_render_text_field(today_proc)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Benefit</td><td>${cr_render_text_field(benefit)}</td></tr>
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Size</td><td>${frappe.utils.escape_html(size_line)}</td></tr>
-					${is_mandatory ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Mandatory Reason</td><td>${frappe.utils.escape_html(mand_reason)}</td></tr>` : ''}
+					${is_mandatory ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Mandatory Reason</td><td>${cr_render_text_field(mand_reason)}</td></tr>` : ''}
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Priority Score</td><td>
 						<div style="display:flex; align-items:baseline; gap:8px; margin-bottom:4px;">
 							<b style="font-size:15px; color:#111827;">${score} / 100</b>
@@ -669,13 +699,14 @@ function cr_render_preview_tab(frm) {
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">System Affected</td><td>${frappe.utils.escape_html(system)}</td></tr>
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Date</td><td>${frappe.utils.escape_html(date)}</td></tr>
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Title</td><td><b>${frappe.utils.escape_html(title)}</b></td></tr>
-					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">What is Needed</td><td><div style="line-height: 1.5;">${doc.change_description || "—"}</div></td></tr>
-					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">How it Works Today</td><td>${frappe.utils.escape_html(today_proc)}</td></tr>
-					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Expected Benefit</td><td>${frappe.utils.escape_html(benefit)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">What is Needed</td><td>${cr_render_html_field(doc.change_description)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">How it Works Today</td><td>${cr_render_text_field(today_proc)}</td></tr>
+					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Expected Benefit</td><td>${cr_render_text_field(benefit)}</td></tr>
+					${doc.business_justification && doc.business_justification !== benefit && doc.business_justification !== "—" ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Business Justification</td><td>${cr_render_html_field(doc.business_justification)}</td></tr>` : ''}
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Problem Size</td><td>${frappe.utils.escape_html(size_line)}</td></tr>
-					${doc.reference_documents ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Reference Documents</td><td>${frappe.utils.escape_html(doc.reference_documents)}</td></tr>` : ''}
+					${doc.reference_documents ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Reference Documents</td><td>${cr_render_text_field(doc.reference_documents)}</td></tr>` : ''}
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Attachments</td><td>${attachments_html}</td></tr>
-					${is_mandatory ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Mandatory Reason</td><td>${frappe.utils.escape_html(mand_reason)}</td></tr>` : ''}
+					${is_mandatory ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Mandatory Reason</td><td>${cr_render_text_field(mand_reason)}</td></tr>` : ''}
 					<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Priority Score</td><td>
 						<div style="display:flex; align-items:baseline; gap:8px; margin-bottom:4px;">
 							<b style="font-size:15px; color:#111827;">${score} / 100</b>
@@ -688,7 +719,7 @@ function cr_render_preview_tab(frm) {
 						<div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Impact ${impact} · Urgency ${urgency} · Reach ${reach}</div>
 					</td></tr>
 					${has_erp_head || effort ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Assessment</td><td>${frappe.utils.escape_html(assessment_line)}</td></tr>` : ''}
-					${(has_erp_head || solution !== "—") && doc.solution_approach ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Solution Approach</td><td>${frappe.utils.escape_html(solution)}</td></tr>` : ''}
+					${(has_erp_head || solution !== "—") && doc.solution_approach ? `<tr><td style="font-weight: 600; color: var(--text-muted); text-transform: uppercase; font-size: 11px;">Solution Approach</td><td>${cr_render_text_field(solution)}</td></tr>` : ''}
 				</tbody>
 			</table>
 		</div>
