@@ -98,7 +98,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Type",
-   "options": "\nNew development\nEnhancement\nMinor change\nCustom\nINT\nConfig",
+   "options": "\nNew development\nEnhancement\nMinor change",
    "reqd": 1
   },
   {
