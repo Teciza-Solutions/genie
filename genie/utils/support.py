@@ -372,6 +372,14 @@ def create_change_request(
 			matched = frappe.db.get_value("Employee", {"user_id": user}, "department")
 		department = matched if (matched and frappe.db.exists("Department", matched)) else None
 
+	def parse_date_safe(val):
+		if not val:
+			return None
+		try:
+			return frappe.utils.getdate(val)
+		except Exception:
+			return None
+
 	cr_doc = frappe.get_doc({
 		"doctype": "Change Request",
 		"title": title,
@@ -396,11 +404,11 @@ def create_change_request(
 		"reach_rating": reach_rating or "3 - One department",
 		"is_mandatory": cint(is_mandatory),
 		"mandatory_reason": mandatory_reason,
-		"needed_by": needed_by,
+		"needed_by": parse_date_safe(needed_by),
 		"reason_for_date": reason_for_date,
 		"effort_days": flt(effort_days) if effort_days else None,
 		"developer": developer,
-		"target_delivery_date": target_delivery_date,
+		"target_delivery_date": parse_date_safe(target_delivery_date),
 		"planned_overtime_hours": flt(planned_overtime_hours) if planned_overtime_hours else None,
 		"solution_approach": solution_approach,
 		"file_attachment": file_attachment,

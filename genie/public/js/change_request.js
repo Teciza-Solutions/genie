@@ -532,6 +532,20 @@ genie.ChangeRequest = class ChangeRequest {
             if (f.$input && f.$input.length) return f.$input.is(":checked") ? 1 : 0;
             return f.value ? 1 : 0;
         }
+        if (f.df && (f.df.fieldtype === "Date" || f.df.fieldtype === "Datetime")) {
+            if (f.get_value) {
+                const val = f.get_value();
+                if (val) return val;
+            }
+            if (f.value) return f.value;
+            if (f.$input && f.$input.length) {
+                const dom_val = f.$input.val();
+                if (dom_val && typeof frappe !== "undefined" && frappe.datetime?.user_to_str) {
+                    try { return frappe.datetime.user_to_str(dom_val); } catch (e) {}
+                }
+                return dom_val || "";
+            }
+        }
         if (f.$input && f.$input.length) {
             const dom_val = f.$input.val();
             if (dom_val !== undefined && dom_val !== null) return dom_val;
