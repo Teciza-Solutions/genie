@@ -8,8 +8,23 @@ from frappe.utils import nowdate, today
 
 class ChangeRequest(Document):
 	def validate(self):
+		self.normalize_dates()
 		self.set_defaults()
 		self.calculate_priority()
+
+	def normalize_dates(self):
+		date_fields = [
+			"needed_by", "target_delivery_date", "start_date",
+			"training_date", "actual_training_date", "enforced_from",
+			"approved_date", "date"
+		]
+		for df in date_fields:
+			val = getattr(self, df, None)
+			if val:
+				try:
+					setattr(self, df, frappe.utils.getdate(val))
+				except Exception:
+					pass
 
 	def set_defaults(self):
 		if not self.date:
