@@ -11,12 +11,14 @@ def make_request(
 	headers,
 	payload,
 	req_type="POST",
-	return_response=False
+	return_response=False,
+	log=True,
 ):
 	response = requests.request(
 		req_type, url, json=payload, headers=headers
 	)
-	log_request(url, payload, response.json() if response.status_code == 200 else response.text)
+	if log:
+		log_request(url, payload, response.json() if response.status_code == 200 else response.text)
 	response.raise_for_status()
 	if return_response:
 		return response
