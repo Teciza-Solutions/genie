@@ -438,6 +438,19 @@ def create_change_request(
 	return cr_doc.name
 
 
+CHANGE_REQUEST_EXPORT_FIELDS = (
+	"date", "type", "title", "change_description", "current_process", "expected_benefit",
+	"business_justification", "system_affected", "company", "employee", "department",
+	"users_count", "frequency", "hours_spent_per_week",
+	"reference_documents", "impact_rating", "urgency_rating", "reach_rating",
+	"is_mandatory", "mandatory_reason", "needed_by", "reason_for_date", "impact",
+	"effort_days", "developer", "target_delivery_date", "planned_overtime_hours",
+	"start_date", "training_date", "solution_approach", "testing_notes",
+	"actual_training_date", "users_trained", "training_accepted", "enforced_from",
+	"old_process_stopped", "enforcement_notes", "approved_by", "approved_date",
+)
+
+
 def push_change_request_to_opero(doc):
 	"""Push approved Change Request from Genie to Opero"""
 	settings = frappe.get_cached_doc("Genie Settings")
@@ -450,16 +463,18 @@ def push_change_request_to_opero(doc):
 	}
 
 	user = doc.requested_by or frappe.session.user
-	user_fullname = doc.requested_by_fullname or doc.requested_by
-	department = doc.department
-
-	roles = frappe.get_roles(user)
-	is_department_head = "HOD" in roles or "Department Head" in roles
-
-	ensure_portal_user(settings, headers, user, user_fullname, department, is_department_head)
+	request_data = {field: doc.get(field) for field in CHANGE_REQUEST_EXPORT_FIELDS}
+	request_data.update({
+		"project": settings.hd_customer,
+		"date": doc.date or frappe.utils.today(),
+		"type": doc.type or "Custom",
+		"requested_by": user,
+		"prepared_by": user,
+		"requested_by_fullname": doc.requested_by_fullname or frappe.utils.get_fullname(user),
+		"status": "Open",
+	})
 
 	attachments = []
-
 	if doc.get("attachments"):
 		for row in doc.attachments:
 			if row.file:
@@ -472,6 +487,7 @@ def push_change_request_to_opero(doc):
 						url=f"{settings.support_url.rstrip('/')}/api/method/upload_file",
 						headers=headers,
 						payload={"file_url": file_url},
+						log=False,
 					).get("message")
 					if file_data:
 						attachments.append(file_data)
@@ -488,32 +504,51 @@ def push_change_request_to_opero(doc):
 				url=f"{settings.support_url.rstrip('/')}/api/method/upload_file",
 				headers=headers,
 				payload={"file_url": file_url},
+				log=False,
 			).get("message")
 			if file_data:
 				attachments.append(file_data)
+				request_data["file_attachment"] = file_data.get("file_url")
 		except Exception as e:
 			frappe.log_error(title="File Upload Error for Change Request", message=str(e))
 
 	try:
+		company_fields = ["abbr", "default_currency", "country"]
+		linked_records = {
+			"users": {
+				email: frappe.utils.get_fullname(email)
+				for email in {user, doc.approved_by} if email
+			},
+			"requester_is_department_head": bool({"HOD", "Department Head"}.intersection(frappe.get_roles(user))),
+		}
+		for field, doctype, fields in (
+			("company", "Company", company_fields),
+			("department", "Department", ["department_name", "company"]),
+			("employee", "Employee", ["employee_name"]),
+		):
+			if doc.get(field):
+				linked_records[field] = frappe.db.get_value(doctype, doc.get(field), fields, as_dict=True)
+
+		department = linked_records.get("department")
+		if department and department.company and department.company != doc.company:
+			linked_records["department_company"] = frappe.db.get_value(
+				"Company", department.company, company_fields, as_dict=True
+			)
+
 		response = make_request(
 			url=f"{settings.support_url.rstrip('/')}/api/method/opero.api.change_request.create_opero_change_request",
 			headers=headers,
-			payload={
-				"doc": {
-					"project": settings.hd_customer,
-					"date": str(doc.date or frappe.utils.today()),
-					"type": doc.type or "Custom",
-					"impact": doc.impact or "Low",
-					"change_description": doc.change_description,
-					"business_justification": doc.business_justification,
-					"prepared_by": user,
-					"status": "Open",
-				},
+			payload=json.loads(frappe.as_json({
+				"doc": request_data,
+				"linked_records": linked_records,
 				"attachments": attachments,
-			},
+			})),
+			log=False,
 		)
 
 		opero_id = response.get("message") if isinstance(response, dict) else None
+		if isinstance(opero_id, dict) and opero_id.get("error"):
+			frappe.throw(opero_id["error"])
 		if opero_id and isinstance(opero_id, str):
 			doc.db_set("opero_cr_id", opero_id, update_modified=False)
 			frappe.msgprint(f"Change Request pushed to Opero: {opero_id}")
